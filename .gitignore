@@ -1,0 +1,39 @@
+# ---- Docs ----
+docs/
+
+# ---- Secrets ----
+.env
+*.key
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# ---- Virtualenv ----
+.venv/
+venv/
+env/
+
+# ---- Test / coverage ----
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Data (大文件不入库；放说明文件指明下载方式) ----
+datasets/*.jsonl
+datasets/raw/
+sandbox_runs/
+*.log
+
+# ---- IDE / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

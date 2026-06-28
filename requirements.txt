@@ -1,0 +1,11 @@
+# Claude API（Agent 与 LLM-judge 都通过它调用模型）
+anthropic>=0.40
+
+# 读取 .env 里的 ANTHROPIC_API_KEY
+python-dotenv>=1.0
+
+# 终端审计看板 / 彩色输出
+rich>=13.0
+
+# 测试
+pytest>=8.0
