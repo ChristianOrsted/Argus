@@ -59,6 +59,9 @@ Argus 是一个面向 LLM Agent 的旁路行为监督器。它不试图替代模
 
 阶段 1 保留接口；阶段 2 可接入 DeepSeek 或其他 OpenAI-compatible 模型，且只对高风险工具触发，以控制延时和成本。
 
+阶段 3 已提供 `DeepSeekIntentJudge` 与 `IntentLayer` 的可插拔 judge 协议。默认不启用，
+传入 judge client 后才会对 `run_shell`、`read_file`、`write_file` 进行一致性判断。
+
 ### 3.4 AnomalyLayer
 
 序列异常层，检测异常工具调用链：
@@ -92,3 +95,5 @@ DeepSeek 相关环境变量：
 - 污点来源和触发原因。
 
 这些字段既服务 demo，也服务报告中的风险复现、消融实验和结果表。
+
+阶段 3 新增 `JsonlAuditLogger`，可把每次 `ToolCall`、上下文摘要、逐层 Verdict 和最终 Decision 写入 JSONL。

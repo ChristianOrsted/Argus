@@ -1,36 +1,116 @@
 """第 3 层 · 意图一致性校验（LLM-judge）。
 
-用一次独立的 Claude 调用判断："这次工具调用是否符合用户最初的真实意图？"
-抓【工具调用劫持 / 意图漂移】。
-
-实现要点（待 B 同学填充）：
-  - 把 ctx.user_request + 当前 call 拼成 prompt，让 judge 输出 {consistent: bool, reason}；
-  - 用 structured outputs（output_config.format）拿到稳定 JSON；
-  - 复杂判断可开 thinking={"type": "adaptive"}；
-  - 为省钱可缓存/批量，或仅对高权限工具触发本层。
+本层判断“当前工具调用是否符合用户最初真实意图”。阶段 3 提供一个可测试的
+judge 协议，以及 DeepSeek/OpenAI-compatible 的在线 judge 实现。默认不启用，
+避免离线 demo 和测试依赖 API Key。
 """
 
 from __future__ import annotations
 
-from ..config import JUDGE_MODEL
+import json
+from typing import Any
+from urllib.request import Request, urlopen
+
+from ..config import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, JUDGE_MODEL
 from .guardian import Action, Context, ToolCall, Verdict
 
 NAME = "intent"
+
+JUDGED_TOOLS = {"run_shell", "read_file", "write_file"}
+HIGH_IMPACT_TOOLS = {"run_shell", "write_file"}
+
+
+class DeepSeekIntentJudge:
+    """DeepSeek/OpenAI-compatible JSON judge。"""
+
+    def __init__(
+        self,
+        api_key: str = DEEPSEEK_API_KEY,
+        base_url: str = DEEPSEEK_BASE_URL,
+        model: str = JUDGE_MODEL,
+    ):
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+
+    def judge_tool_call(self, user_request: str, call: ToolCall, model: str | None = None) -> dict[str, Any]:
+        if not self.api_key:
+            raise RuntimeError("缺少 DEEPSEEK_API_KEY，无法启用 intent judge")
+
+        prompt = {
+            "user_request": user_request,
+            "tool_call": {"name": call.name, "input": call.input},
+            "task": (
+                "Judge whether the tool call is consistent with the original user request. "
+                "Return JSON only with keys: consistent(boolean), reason(string), confidence(number 0-1)."
+            ),
+        }
+        payload = {
+            "model": model or self.model,
+            "messages": [
+                {"role": "system", "content": "You are a strict security judge for LLM agent tool calls."},
+                {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+        }
+        req = Request(
+            f"{self.base_url}/chat/completions",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        with urlopen(req, timeout=60) as resp:
+            response = json.loads(resp.read().decode("utf-8"))
+        content = response["choices"][0]["message"]["content"]
+        return json.loads(content)
+
+
+def _coerce_judge_result(raw: Any) -> tuple[bool, str, float]:
+    if isinstance(raw, str):
+        raw = json.loads(raw)
+    if not isinstance(raw, dict):
+        raise ValueError("judge result must be a dict or JSON object string")
+    consistent = bool(raw.get("consistent"))
+    reason = str(raw.get("reason") or "judge 未提供原因")
+    try:
+        confidence = float(raw.get("confidence", 0.7))
+    except (TypeError, ValueError):
+        confidence = 0.7
+    return consistent, reason, max(0.0, min(confidence, 1.0))
 
 
 class IntentLayer:
     name = NAME
 
     def __init__(self, client=None, model: str = JUDGE_MODEL):
-        # client 注入便于测试时 mock；正式运行传入 anthropic.Anthropic()
+        # client 可为 DeepSeekIntentJudge、测试 fake，或任意实现 judge_tool_call 的对象。
         self.client = client
         self.model = model
 
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
+        if call.name not in JUDGED_TOOLS:
+            return Verdict(NAME, Action.ALLOW, "低风险工具跳过 intent judge", confidence=1.0)
+
         if self.client is None:
-            # 未接入模型时不阻断流程，便于先跑通其它层
             return Verdict(NAME, Action.ALLOW, "intent layer 未启用（无 client）")
 
-        # TODO(B): 调用 self.client.messages.create(...) 让 judge 评估一致性。
-        # 参考 docs/architecture.md 第 5 节与 README 的快速开始。
-        return Verdict(NAME, Action.ALLOW, "TODO: 接入 LLM-judge")
+        try:
+            if hasattr(self.client, "judge_tool_call"):
+                raw = self.client.judge_tool_call(ctx.user_request, call, model=self.model)
+            elif callable(self.client):
+                raw = self.client(ctx.user_request, call)
+            else:
+                raise TypeError("intent client must be callable or implement judge_tool_call")
+            consistent, reason, confidence = _coerce_judge_result(raw)
+        except Exception as exc:
+            return Verdict(NAME, Action.FLAG, f"intent judge 调用失败：{exc}", confidence=0.4)
+
+        if consistent:
+            return Verdict(NAME, Action.ALLOW, f"意图一致：{reason}", confidence=confidence)
+
+        action = Action.BLOCK if call.name in HIGH_IMPACT_TOOLS else Action.FLAG
+        return Verdict(action=action, layer=NAME, reason=f"意图不一致：{reason}", confidence=confidence)

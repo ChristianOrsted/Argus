@@ -54,3 +54,26 @@ Validation:
 - `python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
 - `python -m pytest` could not run in the current machine environment because `pytest` is not installed.
+
+## Stage 3 - Intent judge interface and audit trail
+
+Commit message: `feat: add intent judge and audit logging`
+
+Completed scope:
+
+- Replace the `IntentLayer` TODO with a tested, pluggable judge interface.
+- Add `DeepSeekIntentJudge` for DeepSeek/OpenAI-compatible JSON judging.
+- Keep intent judging disabled by default so offline demos and tests do not require API keys.
+- Add structured JSONL audit logging for ToolCall, context summary, verdicts, and decisions.
+- Wire audit logging into the offline demo under `sandbox_runs/audit/offline_demo.jsonl`.
+- Add unit tests for intent decisions and audit record shape.
+
+Validation:
+
+- `python scripts\offline_demo.py` passed and wrote `sandbox_runs/audit/offline_demo.jsonl`.
+- `python scripts\run_benchmark.py` passed and refreshed `report/eval_results.md`.
+- Manual intent judge assertion passed.
+- Manual audit record assertion passed.
+- `python -m compileall src scripts tests` passed.
+- `git diff --check` passed.
+- `python -m pytest` could not run in the current machine environment because `pytest` is not installed.
