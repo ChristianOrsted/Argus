@@ -29,7 +29,8 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 - 通过四层防御进行实时审计、异常检测和阻断。
 - 提供红队攻击样本、良性对照样本、攻击复现脚本和离线评测脚本。
 - 提供网页攻击面实验台：每个攻击面可以独立重跑、观察 ToolCall、逐层 Verdict 和最终拦截结果。
-- 提供 DeepSeek 在线红队生成：由真实大模型按预设攻击面生成攻击请求、危险工具调用和风险说明，再交给 Guardian 检查是否能拦住。
+- 提供 DeepSeek 在线红队生成：由真实大模型按预设攻击面批量生成攻击请求、危险工具调用和风险说明，再交给 Guardian 检查是否能拦住。
+- 提供 DeepSeek 漏拦截分析：对未被拦截的攻击条目，可调用 DeepSeek 分析原因，并写入受限自适应防御规则后重评估。
 - 提供网页端持久历史流：每次请求与审计结果写入本地 SQLite，页面指标和四层防御统计会随历史请求动态更新。
 - 生成可读的 Markdown 评测结果。
 - 输出 JSONL 审计日志，方便演示和报告取证。
@@ -67,6 +68,7 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 - `src/guardian/intent.py`
 - `src/guardian/anomaly.py`
 - `src/guardian/audit.py`
+- `src/guardian/adaptive_rules.py`
 
 Guardian 四层防御：
 
@@ -74,6 +76,7 @@ Guardian 四层防御：
 - `TaintLayer`：污点追踪层。把 `web_fetch`、`read_file` 视为不可信来源；同时抽取具体文本片段、摘要和来源工具调用 ID。若片段流入 `run_shell` / `write_file` 等高权限动作，则按证据告警或阻断。
 - `IntentLayer`：意图一致性层。提供可插拔 judge 接口和 `DeepSeekIntentJudge`，用于判断工具调用是否符合用户原始意图。默认关闭，避免离线演示依赖 API Key。
 - `AnomalyLayer`：序列异常层。当前实现重复工具调用检测，后续可扩展为 n-gram 或 Markov 行为模型。
+- `adaptive_rules.py`：前端漏拦截分析写入的受限自适应规则。规则只做字段包含匹配，不执行代码。
 
 决策逻辑：
 
@@ -187,7 +190,7 @@ cd E:\eve_jump\暑期课程\Argus
 当前验证结果：
 
 ```text
-45 passed in 0.64s
+51 passed in 1.52s
 ```
 
 ### 5.3 跑离线原型演示
@@ -263,7 +266,9 @@ http://127.0.0.1:8765
 页面里有三类主要操作：
 
 - `独立攻击面重跑`：对提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入分别点击“离线重跑”，观察用户请求、工具调用、四层 Verdict 和最终 `ALLOW / FLAG / BLOCK`。
-- `DeepSeek 红队`：选择一个攻击面，点击“运行 DeepSeek 红队”，由 DeepSeek 在线生成新的攻击请求、工具调用、危险点说明，然后由 Guardian 审计并展示是否拦截。
+- `DeepSeek 红队`：选择一个攻击面，设置生成条数，可编辑红队提示词，点击“运行 DeepSeek 红队”。DeepSeek 会在线批量生成攻击请求、工具调用、危险点说明，然后由 Guardian 审计。
+- `批量状态矩阵`：每条攻击显示“条目信息 / 总 / 1 / 2 / 3 / 4 / 操作”。其中“总”是最终决策，1-4 分别对应 Policy、Taint、Intent、Anomaly 四层。
+- `分析漏拦截`：如果某条攻击没有被 `BLOCK`，点击该条右侧按钮，DeepSeek 会分析未拦截原因，生成受限自适应规则，写入 `sandbox_runs/audit/adaptive_rules.json`，然后对同一条攻击重评估。
 - `自定义工具调用评估`：手动输入用户请求、工具名、JSON 参数和污点来源，验证任意 ToolCall 是否会被拦截。
 - `交互审计记录`：页面会从 `sandbox_runs/audit/dashboard_history.sqlite3` 读取历史请求；每次评估后，指标卡、四层防御统计和审计流都会动态刷新。点击“清空历史”可清空本地历史库。
 
@@ -370,6 +375,16 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 间接提示注入修复：污点来源 `web_fetch` 写入 `plans/next_steps.txt` 返回 `BLOCK`
 - 历史流验证：`GET /api/history` 返回持久化记录，动态统计中 4 条烟测请求均为 `BLOCK`
 - DeepSeek 在线红队复测：`memory_poison`、`tool_hijack`、`indirect_injection` 均返回 `BLOCK`
+
+2026-07-15 批量红队矩阵和自适应防御分析接入后已重新验证：
+
+- `.\.venv\Scripts\python -m pytest`：51 passed
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
+- DeepSeek 批量红队：`tool_hijack` 一次生成 2 条，2 条均返回 `BLOCK`
+- 防御状态矩阵：后端返回每条攻击的总状态和四层 Verdict，前端可按“总 / 1 / 2 / 3 / 4”展示
+- 漏拦截分析：DeepSeek 返回未拦截原因和受限规则，写入 `sandbox_runs/audit/adaptive_rules.json`，重评估后同一条目返回 `BLOCK`
+- 工具调用劫持样例修复：`web_fetch https://example.com/data` 这类当前工具看似正常、但红队元数据包含 `delete_database` / `send_http` 风险的条目会被 `BLOCK`
 
 ## 7. 后续还能增强什么
 

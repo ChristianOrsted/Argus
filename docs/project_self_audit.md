@@ -11,8 +11,8 @@
 - 实时审计：JSONL 审计日志、网页 Dashboard 审计流、SQLite 历史审计库。
 - 异常检测和阻断：可对危险 shell、越界文件访问、敏感凭据读取、污点数据流入高权限动作进行阻断或告警。
 - 对抗样本与越狱测试集：本地种子集与公开数据集转换器。
-- 攻击脚本：单样本复现、全量 benchmark、DeepSeek intent judge 在线评测、DeepSeek 在线红队生成。
-- 可演示原型：离线 CLI demo、DeepSeek 在线 demo、本地网页 dashboard、独立攻击面实验台。
+- 攻击脚本：单样本复现、全量 benchmark、DeepSeek intent judge 在线评测、DeepSeek 批量在线红队生成。
+- 可演示原型：离线 CLI demo、DeepSeek 在线 demo、本地网页 dashboard、独立攻击面实验台、漏拦截分析与自适应规则同步。
 
 ## 仍建议补充的方向
 
@@ -46,7 +46,11 @@
 
 Dashboard 当前已经把前端操作写入 `sandbox_runs/audit/dashboard_history.sqlite3`。后续可增加 CSV/Markdown 导出按钮，便于演示后复盘和写报告。
 
-### 6. 报告继续润色
+### 6. 控制自适应规则范围
+
+Dashboard 当前支持把 DeepSeek 漏拦截分析结果写入 `sandbox_runs/audit/adaptive_rules.json`。后续可增加规则启停、规则命中次数统计和人工确认队列，避免自适应规则过宽。
+
+### 7. 报告继续润色
 
 报告草稿已经可用，但最终提交前建议补：
 

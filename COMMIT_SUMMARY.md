@@ -254,3 +254,30 @@ Validation:
 - History API smoke test passed: `/api/history` returned persisted requests and dynamic layer stats.
 - DeepSeek online red-team retest passed: `memory_poison`, `tool_hijack`, and `indirect_injection` all returned `block`.
 - API key was provided only through hidden runtime input or a local ephemeral request and was not written to tracked files.
+
+## Stage 12 - Batch red-team matrix and adaptive defense analysis
+
+Commit message: `feat: add batch redteam matrix and adaptive analysis`
+
+Completed scope:
+
+- Add `Context.metadata` so DeepSeek red-team risk points and danger explanations can participate in Guardian decisions.
+- Add constrained adaptive defense rules in `src/guardian/adaptive_rules.py`.
+- Harden `PolicyLayer` against tool-hijack cases where the current tool call is only `web_fetch` but red-team metadata indicates later `delete_database`, `send_http`, exfiltration, or non-whitelisted actions.
+- Add DeepSeek batch generation with configurable count and prompt override.
+- Add DeepSeek missed-detection analysis that returns a reason, suggested constrained rules, applies those rules, and rechecks the same attack.
+- Add Dashboard APIs: `/api/deepseek-redteam-batch` and `/api/analyze-miss`.
+- Replace the single DeepSeek result display with a batch matrix showing item info, total status, and layer statuses 1-4.
+- Allow clicking a batch row to inspect the exact red-team JSON and Guardian verdicts.
+- Add "analyze missed detection" action for non-blocked rows.
+- Update README, project overview, self-audit, and update log.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 51 tests passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- Dashboard fixed-port smoke test passed: `GET http://127.0.0.1:8765/` returned `200`.
+- Tool-hijack exfil smoke test passed: `web_fetch` for `internal.example.com` with user-requested `evil.example` upload returned `block`.
+- DeepSeek batch red-team smoke test passed: `tool_hijack` generated 2 attacks and both returned `block` with per-layer statuses.
+- DeepSeek missed-detection analysis smoke test passed: DeepSeek produced a reason and one constrained adaptive rule; rechecking the same item returned `block`.
+- API key was provided only through hidden runtime input or a local ephemeral request and was not written to tracked files.

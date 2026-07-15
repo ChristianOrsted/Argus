@@ -3,10 +3,14 @@ const state = {
   selectedCaseId: null,
   audit: [],
   history: { entries: [], summary: { total: 0, actions: {}, layers: {}, categories: {}, avg_latency_ms: 0 } },
+  batchResults: [],
+  batchAnalyses: {},
+  selectedBatchIndex: null,
   busy: false,
 };
 
 const el = (id) => document.getElementById(id);
+const LAYER_ORDER = ["policy", "taint", "intent", "anomaly"];
 
 function fmtPercent(value) {
   return `${(value * 100).toFixed(1)}%`;
@@ -36,6 +40,15 @@ function actionClass(action) {
 
 function actionLabel(action) {
   return String(action || "waiting").toUpperCase();
+}
+
+function layerAction(result, layer) {
+  const verdict = ((result.decision || {}).verdicts || []).find((item) => item.layer === layer);
+  return verdict ? verdict.action : "neutral";
+}
+
+function statusDot(action, title = "") {
+  return `<span class="status-dot-mini ${actionClass(action)}" title="${escapeHtml(title || actionLabel(action))}"></span>`;
 }
 
 async function api(path, options = {}) {
@@ -219,6 +232,71 @@ function renderSurfaceLab() {
     `<option value="${escapeHtml(surface.id)}">${escapeHtml(surface.title)}</option>`
   )).join("");
   select.value = surfaces.some((surface) => surface.id === current) ? current : ((surfaces[0] && surfaces[0].id) || "");
+  syncPromptPlaceholder();
+}
+
+function syncPromptPlaceholder() {
+  const surface = (state.data.attack_surfaces || []).find((item) => item.id === el("deepseekSurface").value);
+  el("deepseekPrompt").placeholder = surface ? surface.prompt : "留空则使用默认红队提示词";
+}
+
+function shortTool(result) {
+  const call = (result.case || {}).tool_call || {};
+  const input = call.input || {};
+  return `${call.name || "tool"} ${input.url || input.path || input.command || input.cmd || ""}`.trim();
+}
+
+function renderBatchMatrix() {
+  const matrix = el("batchMatrix");
+  if (!state.batchResults.length) {
+    matrix.innerHTML = `<div class="empty-state">尚未生成批量攻击条目</div>`;
+    return;
+  }
+  matrix.innerHTML = state.batchResults.map((result, index) => {
+    const decision = result.decision || {};
+    const redteam = result.redteam || {};
+    const active = index === state.selectedBatchIndex ? "active" : "";
+    const canAnalyze = decision.action !== "block";
+    return `
+      <div class="batch-row ${active}" data-batch-index="${index}">
+        <div class="batch-title">
+          <strong>${escapeHtml(redteam.attack_goal || shortTool(result) || `attack-${index + 1}`)}</strong>
+          <small>${escapeHtml(shortTool(result))}</small>
+        </div>
+        <span>${statusDot(decision.action, decision.reason)}</span>
+        ${LAYER_ORDER.map((layer) => statusDot(layerAction(result, layer), layer)).join("")}
+        <button class="ghost-button mini-action" data-analyze-index="${index}" ${canAnalyze ? "" : "disabled"}>分析漏拦截</button>
+      </div>
+    `;
+  }).join("");
+  matrix.querySelectorAll("[data-batch-index]").forEach((node) => {
+    node.addEventListener("click", () => selectBatchItem(Number(node.dataset.batchIndex)));
+  });
+  matrix.querySelectorAll("[data-analyze-index]").forEach((node) => {
+    node.addEventListener("click", (event) => {
+      event.stopPropagation();
+      analyzeMiss(Number(node.dataset.analyzeIndex));
+    });
+  });
+}
+
+function selectBatchItem(index) {
+  const result = state.batchResults[index];
+  if (!result) {
+    return;
+  }
+  state.selectedBatchIndex = index;
+  renderBatchMatrix();
+  renderDecision(result);
+  const analysis = state.batchAnalyses[index];
+  el("deepseekOutput").textContent = prettyJson(result.redteam || {});
+  el("deepseekDecision").textContent = prettyJson({
+    action: result.decision.action,
+    reason: result.decision.reason,
+    verdicts: result.decision.verdicts,
+    latency_ms: result.latency_ms,
+    analysis: analysis || null,
+  });
 }
 
 function renderDecision(result) {
@@ -275,33 +353,61 @@ async function rerunSurface(surfaceId) {
 async function runDeepSeekRedTeam(surfaceId) {
   const selectedSurface = surfaceId || el("deepseekSurface").value;
   el("deepseekSurface").value = selectedSurface;
-  el("deepseekOutput").textContent = "DeepSeek 正在生成红队样本...";
-  el("deepseekDecision").textContent = "等待 Guardian 审计...";
+  el("deepseekOutput").textContent = "DeepSeek 正在批量生成红队样本...";
+  el("deepseekDecision").textContent = "等待 Guardian 批量审计...";
   el("deepseekRunBtn").disabled = true;
   try {
-    const result = await api("/api/deepseek-redteam", {
+    const batch = await api("/api/deepseek-redteam-batch", {
       method: "POST",
       body: JSON.stringify({
         surface_id: selectedSurface,
         api_key: el("deepseekKey").value,
         use_intent_judge: el("deepseekIntent").checked,
+        count: Number(el("deepseekCount").value || 1),
+        prompt: el("deepseekPrompt").value,
       }),
     });
-    el("deepseekOutput").textContent = prettyJson(result.redteam);
-    el("deepseekDecision").textContent = prettyJson({
-      action: result.decision.action,
-      reason: result.decision.reason,
-      verdicts: result.decision.verdicts,
-      latency_ms: result.latency_ms,
-      intent_judge_enabled: result.intent_judge_enabled,
-    });
-    renderDecision(result);
+    state.batchResults = batch.results || [];
+    state.batchAnalyses = {};
+    state.selectedBatchIndex = state.batchResults.length ? 0 : null;
+    renderBatchMatrix();
+    if (state.batchResults.length) {
+      selectBatchItem(0);
+    }
     await loadHistory();
   } catch (err) {
     el("deepseekDecision").textContent = err.message;
     addAudit("deepseek", "block", "DeepSeek 红队调用失败", err.message);
   } finally {
     el("deepseekRunBtn").disabled = false;
+  }
+}
+
+async function analyzeMiss(index) {
+  const result = state.batchResults[index];
+  if (!result) {
+    return;
+  }
+  el("deepseekDecision").textContent = "DeepSeek 正在分析漏拦截原因并生成受限防御规则...";
+  try {
+    const analysis = await api("/api/analyze-miss", {
+      method: "POST",
+      body: JSON.stringify({
+        surface_id: (result.surface || {}).id,
+        result,
+        api_key: el("deepseekKey").value,
+        apply_rules: true,
+      }),
+    });
+    state.batchAnalyses[index] = analysis;
+    if (analysis.recheck_result) {
+      state.batchResults[index] = analysis.recheck_result;
+    }
+    renderBatchMatrix();
+    selectBatchItem(index);
+    addAudit("adaptive-rule", "flag", "DeepSeek 已分析漏拦截并同步自适应规则", `${(analysis.applied_rules || []).length} rules`);
+  } catch (err) {
+    addAudit("adaptive-rule", "block", "DeepSeek 漏拦截分析失败", err.message);
   }
 }
 
@@ -313,6 +419,7 @@ function renderAll() {
   renderCoverage();
   renderDeepSeekStatus();
   renderSurfaceLab();
+  renderBatchMatrix();
   const selected = state.data.results.find((item) => item.case.id === state.selectedCaseId);
   if (selected) {
     renderDecision(selected);
@@ -391,6 +498,7 @@ function bindEvents() {
   el("runAllBtn").addEventListener("click", runAll);
   el("customRunBtn").addEventListener("click", evaluateCustom);
   el("deepseekRunBtn").addEventListener("click", () => runDeepSeekRedTeam());
+  el("deepseekSurface").addEventListener("change", syncPromptPlaceholder);
   el("clearAuditBtn").addEventListener("click", () => {
     state.audit = [];
     api("/api/history/clear", { method: "POST", body: "{}" })

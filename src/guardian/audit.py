@@ -32,6 +32,7 @@ def decision_to_record(call: ToolCall, ctx: Context, decision: Decision, event: 
                 }
                 for fragment in ctx.tainted_fragments
             ],
+            "metadata": ctx.metadata,
         },
         "decision": {
             "action": decision.action.value,

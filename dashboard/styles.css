@@ -496,8 +496,16 @@ textarea,
 .deepseek-controls {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 120px;
   gap: 12px;
+}
+
+.wide-control {
+  grid-column: 1 / -1;
+}
+
+.compact-textarea {
+  min-height: 74px;
 }
 
 .toggle-row {
@@ -517,6 +525,77 @@ textarea,
   display: grid;
   grid-template-columns: 1fr;
   gap: 14px;
+}
+
+.matrix-head,
+.batch-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 42px 34px 34px 34px 34px minmax(120px, .35fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.matrix-head {
+  margin-top: 16px;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.batch-matrix {
+  margin-top: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.batch-row {
+  border: 1px solid var(--line);
+  background: #111821;
+  border-radius: 8px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.batch-row:hover,
+.batch-row.active {
+  border-color: var(--blue);
+  background: #172131;
+}
+
+.batch-title {
+  min-width: 0;
+}
+
+.batch-title strong {
+  display: block;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.batch-title small {
+  color: var(--muted);
+  display: block;
+  margin-top: 3px;
+}
+
+.status-dot-mini {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  display: inline-block;
+}
+
+.status-dot-mini.allow { background: var(--green); box-shadow: 0 0 0 3px rgba(83, 216, 106, .12); }
+.status-dot-mini.flag { background: var(--amber); box-shadow: 0 0 0 3px rgba(240, 184, 74, .12); }
+.status-dot-mini.block { background: var(--red); box-shadow: 0 0 0 3px rgba(255, 107, 107, .12); }
+.status-dot-mini.neutral { background: #3a4555; }
+
+.mini-action {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
 }
 
 .code-block.tall {
@@ -599,11 +678,23 @@ textarea {
   .surface-grid,
   .analysis-grid,
   .detail-grid,
+  .deepseek-controls,
   .verdict-strip,
   .form-grid {
     grid-template-columns: 1fr;
   }
+  .matrix-head,
+  .batch-row {
+    grid-template-columns: minmax(170px, 1fr) repeat(5, 28px);
+  }
+  .matrix-head span:last-child,
+  .batch-row .mini-action {
+    display: none;
+  }
   label.wide {
+    grid-column: auto;
+  }
+  .wide-control {
     grid-column: auto;
   }
 }

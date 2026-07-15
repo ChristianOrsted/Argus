@@ -44,6 +44,7 @@ class Context:
     history: list[ToolCall] = field(default_factory=list)   # 已发生的工具调用序列
     tainted_sources: set[str] = field(default_factory=set)  # 已知的污点来源标记（见 taint 层）
     tainted_fragments: list[TaintedFragment] = field(default_factory=list)  # 片段级污点
+    metadata: dict[str, Any] = field(default_factory=dict)  # 红队/前端传入的结构化上下文
 
 
 @dataclass

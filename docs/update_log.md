@@ -1,5 +1,29 @@
 # Argus Update Log
 
+## 2026-07-15 - Batch Red Team Matrix And Adaptive Defense Analysis
+
+本次新增功能：
+
+- DeepSeek 红队支持一次生成多条攻击样本，前端可设置生成条数。
+- DeepSeek 红队提示词可在前端显式编辑；留空时使用对应攻击面的默认提示词。
+- 前端新增批量防御状态矩阵：每条攻击显示“条目信息 / 总 / 1 / 2 / 3 / 4 / 操作”，其中 1-4 对应 `Policy`、`Taint`、`Intent`、`Anomaly` 四层状态。
+- 点击任意攻击条目可查看该条 DeepSeek 原始红队 JSON、Guardian 总决策和四层 Verdict。
+- 对未被 `BLOCK` 的条目，前端提供“分析漏拦截”按钮，调用 DeepSeek 分析未拦截原因。
+- 新增受限自适应规则文件 `sandbox_runs/audit/adaptive_rules.json`；DeepSeek 只能生成 `tool_name`、`surface_id`、`*_contains_any` 这类数据规则，不能生成或执行代码。
+- 漏拦截分析后会自动应用自适应规则，并对同一攻击条目重评估，前端显示应用规则后的防御状态。
+- Guardian `Context` 新增 `metadata`，DeepSeek 红队的 `risk_points`、`danger_explanation`、`expected_guardian_action` 会进入防御判断。
+- 修复工具调用劫持中“当前工具只是 `web_fetch`，但红队元数据明确说明后续会诱导 `delete_database` / `send_http`”的绕过问题。
+
+本次验证结果：
+
+- 单元测试通过：51 passed。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 页面入口通过：`GET http://127.0.0.1:8765/` 返回 `200`。
+- 用户请求中包含 `evil.example` 外联意图时，即使当前工具只是 `web_fetch internal.example.com`，也返回 `block`。
+- DeepSeek 批量红队通过：`tool_hijack` 一次生成 2 条，2 条均返回 `block`，并返回每条四层状态。
+- 漏拦截分析接口通过：DeepSeek 返回未拦截原因，写入 1 条受限自适应规则，重评估后同一条目返回 `block`。
+- 真实 API Key 只通过隐藏输入或本地页面临时请求进入内存，没有写入项目文件。
+
 ## 2026-07-15 - Dashboard History And DeepSeek Attack Hardening
 
 本次新增功能：

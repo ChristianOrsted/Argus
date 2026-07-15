@@ -20,10 +20,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.config import AGENT_MODEL, DEEPSEEK_API_KEY
 from src.eval.benchmark import evaluate_guardian
+from src.guardian.adaptive_rules import append_adaptive_rules, load_adaptive_rules
 from src.guardian import Context, DeepSeekIntentJudge, ToolCall, build_default_guardian
 from src.redteam.attacks import EVAL_CASES, AttackCase
 from src.redteam.surface_lab import (
     ATTACK_SURFACES,
+    DeepSeekDefenseAnalyzer,
     DeepSeekRedTeamGenerator,
     generated_attack_to_case,
     get_attack_surface,
@@ -36,11 +38,12 @@ STATIC_ROOT = DASHBOARD_DIR.resolve()
 HISTORY_DB = ROOT / "sandbox_runs" / "audit" / "dashboard_history.sqlite3"
 
 
-def _case_context(case: AttackCase) -> Context:
+def _case_context(case: AttackCase, metadata: dict | None = None) -> Context:
     return Context(
         user_request=case.user_request,
         history=list(case.history),
         tainted_sources=set(case.tainted_sources),
+        metadata=metadata or {},
     )
 
 
@@ -245,9 +248,9 @@ def resolve_static_path(request_path: str) -> Path | None:
     return target if target.is_file() else None
 
 
-def evaluate_case(case: AttackCase, guardian=None) -> dict:
+def evaluate_case(case: AttackCase, guardian=None, metadata: dict | None = None) -> dict:
     guardian = guardian or build_default_guardian()
-    ctx = _case_context(case)
+    ctx = _case_context(case, metadata=metadata)
     start = perf_counter()
     decision = guardian.evaluate(case.tool_call, ctx)
     latency_ms = (perf_counter() - start) * 1000
@@ -258,6 +261,7 @@ def evaluate_case(case: AttackCase, guardian=None) -> dict:
         "context": {
             "tainted_sources": sorted(ctx.tainted_sources),
             "history_len": len(ctx.history),
+            "metadata": ctx.metadata,
         },
     }
 
@@ -272,21 +276,93 @@ def evaluate_surface(surface_id: str) -> dict:
     }
 
 
-def run_deepseek_redteam(payload: dict, generator=None) -> dict:
-    surface = get_attack_surface(str(payload.get("surface_id", "")))
-    api_key = str(payload.get("api_key") or "")
-    use_intent_judge = bool(payload.get("use_intent_judge"))
-    generator = generator or DeepSeekRedTeamGenerator(api_key=api_key or DEEPSEEK_API_KEY)
-    generated = generator.generate(surface)
+def _generator_generate(generator, surface, prompt_override: str = "") -> dict:
+    try:
+        return generator.generate(surface, prompt_override=prompt_override)
+    except TypeError:
+        return generator.generate(surface)
+
+
+def _evaluate_generated_attack(surface, generated: dict, api_key: str = "", use_intent_judge: bool = False) -> dict:
     case = generated_attack_to_case(surface, generated)
     intent_client = DeepSeekIntentJudge(api_key=api_key or DEEPSEEK_API_KEY) if use_intent_judge else None
-    result = evaluate_case(case, guardian=build_default_guardian(intent_client=intent_client))
+    metadata = {
+        "attack_surface": surface.id,
+        "attack_goal": generated.get("attack_goal"),
+        "risk_points": generated.get("risk_points", []),
+        "danger_explanation": generated.get("danger_explanation"),
+        "expected_guardian_action": generated.get("expected_guardian_action"),
+        "raw_model_output": generated.get("raw_model_output"),
+    }
+    result = evaluate_case(case, guardian=build_default_guardian(intent_client=intent_client), metadata=metadata)
     return {
         "mode": "deepseek",
         "surface": serialize_surface(surface),
         "redteam": generated,
         "intent_judge_enabled": use_intent_judge,
         **result,
+    }
+
+
+def run_deepseek_redteam(payload: dict, generator=None) -> dict:
+    surface = get_attack_surface(str(payload.get("surface_id", "")))
+    api_key = str(payload.get("api_key") or "")
+    use_intent_judge = bool(payload.get("use_intent_judge"))
+    prompt_override = str(payload.get("prompt") or "")
+    generator = generator or DeepSeekRedTeamGenerator(api_key=api_key or DEEPSEEK_API_KEY)
+    generated = _generator_generate(generator, surface, prompt_override=prompt_override)
+    return _evaluate_generated_attack(surface, generated, api_key=api_key, use_intent_judge=use_intent_judge)
+
+
+def run_deepseek_batch(payload: dict, generator=None) -> dict:
+    surface = get_attack_surface(str(payload.get("surface_id", "")))
+    api_key = str(payload.get("api_key") or "")
+    count = max(1, min(int(payload.get("count") or 1), 8))
+    use_intent_judge = bool(payload.get("use_intent_judge"))
+    prompt_override = str(payload.get("prompt") or "")
+    generator = generator or DeepSeekRedTeamGenerator(api_key=api_key or DEEPSEEK_API_KEY)
+    if hasattr(generator, "generate_many"):
+        generated_items = generator.generate_many(surface, count=count, prompt_override=prompt_override)
+    else:
+        generated_items = [_generator_generate(generator, surface, prompt_override=prompt_override) for _ in range(count)]
+    results = [
+        _evaluate_generated_attack(surface, generated, api_key=api_key, use_intent_judge=use_intent_judge)
+        for generated in generated_items
+    ]
+    actions = {"allow": 0, "flag": 0, "block": 0}
+    for result in results:
+        action = result["decision"]["action"]
+        if action in actions:
+            actions[action] += 1
+    return {
+        "mode": "deepseek_batch",
+        "surface": serialize_surface(surface),
+        "count": len(results),
+        "actions": actions,
+        "results": results,
+    }
+
+
+def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
+    result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
+    surface_id = str(payload.get("surface_id") or (result.get("surface") or {}).get("id") or "")
+    surface = get_attack_surface(surface_id)
+    generated = result.get("redteam") if isinstance(result.get("redteam"), dict) else {}
+    api_key = str(payload.get("api_key") or "")
+    analyzer = analyzer or DeepSeekDefenseAnalyzer(api_key=api_key or DEEPSEEK_API_KEY)
+    analysis = analyzer.analyze(surface, generated, result)
+    applied = []
+    recheck_result = None
+    if bool(payload.get("apply_rules", True)):
+        applied = append_adaptive_rules(analysis.get("suggested_rules", []))
+        if generated:
+            recheck_result = _evaluate_generated_attack(surface, generated)
+    return {
+        "surface": serialize_surface(surface),
+        "analysis": analysis,
+        "applied_rules": applied,
+        "recheck_result": recheck_result,
+        "adaptive_rules": load_adaptive_rules(),
     }
 
 
@@ -437,6 +513,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 result = run_deepseek_redteam(payload)
                 record_history("deepseek", result)
                 _json_response(self, 200, result)
+                return
+            if parsed.path == "/api/deepseek-redteam-batch":
+                result = run_deepseek_batch(payload)
+                for item in result["results"]:
+                    record_history("deepseek", item)
+                _json_response(self, 200, result)
+                return
+            if parsed.path == "/api/analyze-miss":
+                _json_response(self, 200, analyze_missed_detection(payload))
                 return
             if parsed.path == "/api/history/clear":
                 clear_history()
