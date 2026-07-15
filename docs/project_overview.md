@@ -102,6 +102,7 @@ Guardian 四层防御：
 - `scripts/replay_case.py`
 - `scripts/run_benchmark.py`
 - `scripts/run_intent_judge_eval.py`
+- `scripts/convert_public_jailbreaks.py`
 - `scripts/deepseek_demo.py`
 
 作用：
@@ -110,6 +111,7 @@ Guardian 四层防御：
 - `replay_case.py`：按样本 ID 复现单个攻击或良性场景。
 - `run_benchmark.py`：运行全部种子样本，输出检出率、误报率和延时。
 - `run_intent_judge_eval.py`：调用真实 DeepSeek intent judge，在线评测工具调用与用户意图是否一致。
+- `convert_public_jailbreaks.py`：把 AdvBench/JailbreakBench 风格公开数据集转换为 Argus jsonl。
 - `deepseek_demo.py`：有 DeepSeek API Key 时，运行真实在线 Agent demo。
 
 ### 3.5 报告与结果
@@ -280,6 +282,12 @@ DeepSeek API Key 仅通过运行时隐藏输入临时注入，没有写入脚本
 
 - `.\.venv\Scripts\python -m pytest`：25 passed
 - `.\.venv\Scripts\python scripts\run_intent_judge_eval.py`：通过，5/5 判断正确
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+
+2026-07-15 公开越狱集转换能力接入后已重新验证：
+
+- `.\.venv\Scripts\python scripts\convert_public_jailbreaks.py datasets\public_samples\advbench_sample.csv datasets\public_jailbreak_seed.jsonl --source advbench`：通过，3 条样例转换成功
+- `.\.venv\Scripts\python -m pytest`：27 passed
 - `.\.venv\Scripts\python -m compileall src scripts tests`：通过
 
 ## 7. 后续还能增强什么

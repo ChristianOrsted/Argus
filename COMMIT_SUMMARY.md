@@ -157,3 +157,23 @@ Validation:
 - `.\.venv\Scripts\python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
 - API key was provided only through hidden runtime input and was not written to tracked files.
+
+## Stage 8 - Public jailbreak dataset conversion
+
+Commit message: `feat: add public jailbreak dataset converter`
+
+Completed scope:
+
+- Add a flexible converter for AdvBench/JailbreakBench-style CSV/JSON/JSONL files.
+- Support common request fields such as `goal`, `prompt`, `behavior`, `instruction`, `question`, and `query`.
+- Add a small AdvBench-style sample and generated Argus jsonl seed.
+- Add converter CLI and tests.
+- Add `docs/update_log.md` to record future grouped changes and verification steps.
+
+Validation:
+
+- `.\.venv\Scripts\python scripts\convert_public_jailbreaks.py datasets\public_samples\advbench_sample.csv datasets\public_jailbreak_seed.jsonl --source advbench` passed: 3 rows converted.
+- `.\.venv\Scripts\python -m pytest` passed: 27 tests passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `git diff --check` passed.
+- `git grep -n "sk-"` found only placeholder examples, no real API key.
