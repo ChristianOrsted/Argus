@@ -6,13 +6,13 @@
 
 项目已经具备课程题目要求的核心交付物：
 
-- 红队攻击面：提示注入、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入。
+- 红队攻击面：提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入。
 - 行为监督机制：Policy、Taint、Intent、Anomaly 四层 Guardian。
-- 实时审计：JSONL 审计日志与网页 Dashboard 审计流。
+- 实时审计：JSONL 审计日志、网页 Dashboard 审计流、SQLite 历史审计库。
 - 异常检测和阻断：可对危险 shell、越界文件访问、敏感凭据读取、污点数据流入高权限动作进行阻断或告警。
 - 对抗样本与越狱测试集：本地种子集与公开数据集转换器。
-- 攻击脚本：单样本复现、全量 benchmark、DeepSeek intent judge 在线评测。
-- 可演示原型：离线 CLI demo、DeepSeek 在线 demo、本地网页 dashboard。
+- 攻击脚本：单样本复现、全量 benchmark、DeepSeek intent judge 在线评测、DeepSeek 在线红队生成。
+- 可演示原型：离线 CLI demo、DeepSeek 在线 demo、本地网页 dashboard、独立攻击面实验台。
 
 ## 仍建议补充的方向
 
@@ -42,9 +42,9 @@
 - 比较“无 IntentLayer / 有 IntentLayer”的检出差异；
 - 对高风险工具才触发 judge，统计成本。
 
-### 5. 增加前端演示数据持久化
+### 5. 增加历史流导出能力
 
-Dashboard 当前实时调用本地 API 并在页面内维护审计流。后续可把前端操作写入 `sandbox_runs/audit/dashboard.jsonl`，便于演示后复盘。
+Dashboard 当前已经把前端操作写入 `sandbox_runs/audit/dashboard_history.sqlite3`。后续可增加 CSV/Markdown 导出按钮，便于演示后复盘和写报告。
 
 ### 6. 报告继续润色
 

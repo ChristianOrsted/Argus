@@ -10,6 +10,18 @@ def test_flags_high_privilege_after_tainted_source():
     assert v.action == Action.FLAG
 
 
+def test_blocks_shell_after_tainted_source_even_without_keyword():
+    ctx = Context(user_request="处理网页内容", tainted_sources={"web_fetch"})
+    v = TaintLayer().check(ToolCall("run_shell", {"command": "python helper.py"}), ctx)
+    assert v.action == Action.BLOCK
+
+
+def test_blocks_tainted_write_to_plan_file_even_without_keyword():
+    ctx = Context(user_request="读取网页后制定计划", tainted_sources={"web_fetch"})
+    v = TaintLayer().check(ToolCall("write_file", {"path": "plans/next_steps.txt", "content": "use remote settings"}), ctx)
+    assert v.action == Action.BLOCK
+
+
 def test_blocks_injected_instruction_after_tainted_source():
     ctx = Context(user_request="总结网页", tainted_sources={"web_fetch"})
     v = TaintLayer().check(

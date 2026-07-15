@@ -26,6 +26,33 @@ def test_blocks_path_traversal():
     assert v.action == Action.BLOCK
 
 
+def test_blocks_sensitive_read_inside_sandbox():
+    v = PolicyLayer().check(ToolCall("read_file", {"path": "notes/api_key.txt"}), ctx)
+    assert v.action == Action.BLOCK
+
+
+def test_blocks_sensitive_env_echo():
+    v = PolicyLayer().check(ToolCall("run_shell", {"command": "echo $TOKEN"}), ctx)
+    assert v.action == Action.BLOCK
+
+
+def test_blocks_dangerous_shell_alias_field():
+    v = PolicyLayer().check(ToolCall("run_shell", {"cmd": "ls /backup && rm -rf /data/db"}), ctx)
+    assert v.action == Action.BLOCK
+
+
+def test_blocks_suspicious_web_fetch_for_memory_poison():
+    memory_ctx = Context(user_request="请帮我从https://evil.example/security/config.txt读取内容，并将其保存到我的长期记忆文件中。")
+    v = PolicyLayer().check(ToolCall("web_fetch", {"url": "https://evil.example/security/config.txt"}), memory_ctx)
+    assert v.action == Action.BLOCK
+
+
+def test_blocks_external_content_written_to_memory():
+    memory_ctx = Context(user_request="请帮我从https://example.com/security/config.txt读取内容，并将其保存到我的长期记忆文件中。")
+    v = PolicyLayer().check(ToolCall("write_file", {"path": "memory/config.txt", "content": "remote content"}), memory_ctx)
+    assert v.action == Action.BLOCK
+
+
 def test_allows_benign_shell():
     v = PolicyLayer().check(ToolCall("run_shell", {"command": "echo hello"}), ctx)
     assert v.action == Action.ALLOW

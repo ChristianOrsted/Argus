@@ -48,7 +48,7 @@
 
       <section id="overview" class="metric-grid">
         <article class="metric-card danger">
-          <span class="metric-label">攻击检出</span>
+          <span class="metric-label" id="detectedLabel">攻击检出</span>
           <strong id="detectedMetric">--</strong>
           <small id="recallMetric">recall --</small>
         </article>
@@ -65,7 +65,7 @@
         <article class="metric-card info">
           <span class="metric-label">平均延时</span>
           <strong id="latencyMetric">--</strong>
-          <small>local evaluation</small>
+          <small id="latencyScope">local evaluation</small>
         </article>
       </section>
 
@@ -160,6 +160,7 @@
             <div>
               <p class="eyebrow">Layer Statistics</p>
               <h3>四层防御统计</h3>
+              <small id="layerScope" class="scope-note">基线样本统计</small>
             </div>
           </div>
           <div id="layerStats" class="layer-stats"></div>
@@ -218,8 +219,9 @@
           <div>
             <p class="eyebrow">Audit Stream</p>
             <h3>交互审计记录</h3>
+            <small id="historySummary" class="scope-note">历史记录加载中</small>
           </div>
-          <button id="clearAuditBtn" class="ghost-button">清空</button>
+          <button id="clearAuditBtn" class="ghost-button">清空历史</button>
         </div>
         <div id="auditLog" class="audit-log"></div>
       </section>

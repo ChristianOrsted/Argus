@@ -2,6 +2,7 @@ const state = {
   data: null,
   selectedCaseId: null,
   audit: [],
+  history: { entries: [], summary: { total: 0, actions: {}, layers: {}, categories: {}, avg_latency_ms: 0 } },
   busy: false,
 };
 
@@ -57,13 +58,42 @@ async function loadSummary() {
   renderAll();
 }
 
+async function loadHistory() {
+  state.history = await api("/api/history");
+  renderMetrics();
+  renderLayerStats();
+  renderCoverage();
+  renderAudit();
+}
+
+async function refreshAll() {
+  await loadSummary();
+  await loadHistory();
+}
+
 function renderMetrics() {
+  if (!state.data) {
+    return;
+  }
+  const h = state.history.summary || {};
+  if (h.total > 0) {
+    el("detectedLabel").textContent = "历史命中";
+    el("detectedMetric").textContent = `${(h.actions.block || 0) + (h.actions.flag || 0)}/${h.total}`;
+    el("recallMetric").textContent = "persisted audit history";
+    el("flagMetric").textContent = h.actions.flag || 0;
+    el("blockMetric").textContent = h.actions.block || 0;
+    el("latencyMetric").textContent = fmtMs(h.avg_latency_ms || 0);
+    el("latencyScope").textContent = "history average";
+    return;
+  }
   const s = state.data.summary;
+  el("detectedLabel").textContent = "攻击检出";
   el("detectedMetric").textContent = `${s.detected}/${s.attacks}`;
   el("recallMetric").textContent = `recall ${fmtPercent(s.recall)}`;
   el("flagMetric").textContent = s.actions.flag;
   el("blockMetric").textContent = s.actions.block;
   el("latencyMetric").textContent = fmtMs(s.avg_latency_ms);
+  el("latencyScope").textContent = "baseline evaluation";
 }
 
 function renderFilters() {
@@ -98,8 +128,20 @@ function renderCaseList() {
 }
 
 function renderLayerStats() {
-  const layers = state.data.summary.layers;
+  if (!state.data) {
+    return;
+  }
+  const historySummary = state.history.summary || {};
+  const useHistory = historySummary.total > 0;
+  const layers = useHistory ? historySummary.layers : state.data.summary.layers;
+  el("layerScope").textContent = useHistory
+    ? `历史请求统计：${historySummary.total} 条`
+    : "基线样本统计";
   const container = el("layerStats");
+  if (!Object.keys(layers || {}).length) {
+    container.innerHTML = `<div class="empty-state">暂无历史防御层数据</div>`;
+    return;
+  }
   container.innerHTML = Object.entries(layers).map(([layer, counts]) => {
     const total = Math.max(1, counts.allow + counts.flag + counts.block);
     const allow = counts.allow / total * 100;
@@ -122,7 +164,11 @@ function renderLayerStats() {
 }
 
 function renderCoverage() {
-  const categories = state.data.summary.categories;
+  if (!state.data) {
+    return;
+  }
+  const historySummary = state.history.summary || {};
+  const categories = historySummary.total > 0 ? historySummary.categories : state.data.summary.categories;
   const container = el("coverageGrid");
   container.innerHTML = Object.entries(categories).map(([category, count]) => `
     <div class="coverage-item">
@@ -194,7 +240,6 @@ function renderDecision(result) {
       <small>confidence ${escapeHtml(Number(verdict.confidence).toFixed(2))}</small>
     </div>
   `).join("");
-  addAudit(`${caseData.id}`, decision.action, decision.reason, `${fmtMs(result.latency_ms)} latency`);
 }
 
 async function evaluateCase(caseId) {
@@ -205,6 +250,7 @@ async function evaluateCase(caseId) {
     body: JSON.stringify({ case_id: caseId }),
   });
   renderDecision(result);
+  await loadHistory();
 }
 
 async function runAll() {
@@ -220,7 +266,7 @@ async function rerunSurface(surfaceId) {
       body: JSON.stringify({ surface_id: surfaceId }),
     });
     renderDecision(result);
-    addAudit(result.surface.title, result.decision.action, "独立攻击面离线重跑完成", result.mode);
+    await loadHistory();
   } catch (err) {
     addAudit("surface-lab", "block", "攻击面重跑失败", err.message);
   }
@@ -250,7 +296,7 @@ async function runDeepSeekRedTeam(surfaceId) {
       intent_judge_enabled: result.intent_judge_enabled,
     });
     renderDecision(result);
-    addAudit(result.surface.title, result.decision.action, "DeepSeek 在线红队完成", result.redteam.danger_explanation);
+    await loadHistory();
   } catch (err) {
     el("deepseekDecision").textContent = err.message;
     addAudit("deepseek", "block", "DeepSeek 红队调用失败", err.message);
@@ -292,6 +338,7 @@ async function evaluateCustom() {
     }),
   });
   renderDecision(result);
+  await loadHistory();
 }
 
 function addAudit(title, action, reason, meta) {
@@ -308,7 +355,24 @@ function addAudit(title, action, reason, meta) {
 }
 
 function renderAudit() {
-  el("auditLog").innerHTML = state.audit.map((item) => `
+  const historyEntries = (state.history.entries || []).map((entry) => ({
+    title: entry.surface_title || entry.case_id || entry.mode,
+    action: entry.action,
+    reason: entry.reason,
+    meta: `${entry.mode} · ${entry.tool_name || "tool"} · ${fmtMs(entry.latency_ms || 0)}`,
+    time: new Date(entry.created_at).toLocaleString(),
+    request: entry.user_request,
+  }));
+  const entries = [...state.audit, ...historyEntries].slice(0, 80);
+  const total = (state.history.summary || {}).total || 0;
+  el("historySummary").textContent = total > 0
+    ? `已持久记录 ${total} 条请求`
+    : "暂无持久历史，请运行一次攻击或评估";
+  if (!entries.length) {
+    el("auditLog").innerHTML = `<div class="empty-state">暂无审计记录</div>`;
+    return;
+  }
+  el("auditLog").innerHTML = entries.map((item) => `
     <div class="audit-entry">
       <div class="case-line">
         <strong>${escapeHtml(item.title)}</strong>
@@ -316,23 +380,32 @@ function renderAudit() {
       </div>
       <span>${escapeHtml(item.reason)}</span>
       <small>${escapeHtml(item.time)} · ${escapeHtml(item.meta)}</small>
+      ${item.request ? `<p>${escapeHtml(item.request)}</p>` : ""}
     </div>
   `).join("");
 }
 
 function bindEvents() {
   el("categoryFilter").addEventListener("change", renderCaseList);
-  el("refreshBtn").addEventListener("click", loadSummary);
+  el("refreshBtn").addEventListener("click", refreshAll);
   el("runAllBtn").addEventListener("click", runAll);
   el("customRunBtn").addEventListener("click", evaluateCustom);
   el("deepseekRunBtn").addEventListener("click", () => runDeepSeekRedTeam());
   el("clearAuditBtn").addEventListener("click", () => {
     state.audit = [];
-    renderAudit();
+    api("/api/history/clear", { method: "POST", body: "{}" })
+      .then((history) => {
+        state.history = history;
+        renderMetrics();
+        renderLayerStats();
+        renderCoverage();
+        renderAudit();
+      })
+      .catch((err) => addAudit("history", "block", "清空历史失败", err.message));
   });
 }
 
 bindEvents();
-loadSummary().catch((err) => {
+refreshAll().catch((err) => {
   addAudit("startup", "block", "Dashboard API 初始化失败", err.message);
 });

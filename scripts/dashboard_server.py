@@ -6,8 +6,10 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import mimetypes
+import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -31,6 +33,7 @@ from src.redteam.surface_lab import (
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "dashboard"
 STATIC_ROOT = DASHBOARD_DIR.resolve()
+HISTORY_DB = ROOT / "sandbox_runs" / "audit" / "dashboard_history.sqlite3"
 
 
 def _case_context(case: AttackCase) -> Context:
@@ -77,6 +80,149 @@ def serialize_decision(decision) -> dict:
             for verdict in decision.verdicts
         ],
     }
+
+
+def _history_connect(db_path: Path = HISTORY_DB) -> sqlite3.Connection:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS dashboard_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TEXT NOT NULL,
+            mode TEXT NOT NULL,
+            surface_id TEXT,
+            surface_title TEXT,
+            case_id TEXT,
+            category TEXT,
+            user_request TEXT,
+            tool_name TEXT,
+            action TEXT,
+            reason TEXT,
+            latency_ms REAL,
+            payload_json TEXT NOT NULL
+        )
+        """
+    )
+    return conn
+
+
+def _history_payload(mode: str, result: dict) -> dict:
+    return {
+        "mode": mode,
+        "surface": result.get("surface"),
+        "case": result.get("case"),
+        "decision": result.get("decision"),
+        "latency_ms": result.get("latency_ms"),
+        "redteam": result.get("redteam"),
+        "intent_judge_enabled": result.get("intent_judge_enabled"),
+    }
+
+
+def record_history(mode: str, result: dict, db_path: Path = HISTORY_DB) -> None:
+    payload = _history_payload(mode, result)
+    case = payload.get("case") or {}
+    surface = payload.get("surface") or {}
+    decision = payload.get("decision") or {}
+    tool_call = case.get("tool_call") or {}
+    with _history_connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO dashboard_events (
+                created_at, mode, surface_id, surface_title, case_id, category,
+                user_request, tool_name, action, reason, latency_ms, payload_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                dt.datetime.now(dt.timezone.utc).isoformat(),
+                mode,
+                surface.get("id"),
+                surface.get("title"),
+                case.get("id"),
+                case.get("category"),
+                case.get("user_request"),
+                tool_call.get("name"),
+                decision.get("action"),
+                decision.get("reason"),
+                result.get("latency_ms"),
+                json.dumps(payload, ensure_ascii=False),
+            ),
+        )
+
+
+def _row_to_history_entry(row: sqlite3.Row) -> dict:
+    payload = json.loads(row["payload_json"])
+    return {
+        "id": row["id"],
+        "created_at": row["created_at"],
+        "mode": row["mode"],
+        "surface_id": row["surface_id"],
+        "surface_title": row["surface_title"],
+        "case_id": row["case_id"],
+        "category": row["category"],
+        "user_request": row["user_request"],
+        "tool_name": row["tool_name"],
+        "action": row["action"],
+        "reason": row["reason"],
+        "latency_ms": row["latency_ms"],
+        "payload": payload,
+    }
+
+
+def summarize_history(entries: list[dict]) -> dict:
+    actions = {"allow": 0, "flag": 0, "block": 0}
+    layers: dict[str, dict[str, int]] = {}
+    categories: dict[str, int] = {}
+    surfaces: dict[str, int] = {}
+    latencies = []
+
+    for entry in entries:
+        action = entry.get("action") or "allow"
+        if action in actions:
+            actions[action] += 1
+        category = entry.get("category") or "unknown"
+        categories[category] = categories.get(category, 0) + 1
+        surface = entry.get("surface_title") or entry.get("surface_id")
+        if surface:
+            surfaces[surface] = surfaces.get(surface, 0) + 1
+        if entry.get("latency_ms") is not None:
+            latencies.append(float(entry["latency_ms"]))
+        decision = (entry.get("payload") or {}).get("decision") or {}
+        for verdict in decision.get("verdicts") or []:
+            layer = verdict.get("layer") or "unknown"
+            layer_action = verdict.get("action") or "allow"
+            layers.setdefault(layer, {"allow": 0, "flag": 0, "block": 0})
+            if layer_action in layers[layer]:
+                layers[layer][layer_action] += 1
+
+    total = len(entries)
+    return {
+        "total": total,
+        "actions": actions,
+        "layers": layers,
+        "categories": categories,
+        "surfaces": surfaces,
+        "avg_latency_ms": (sum(latencies) / len(latencies)) if latencies else 0,
+    }
+
+
+def load_history(limit: int = 100, db_path: Path = HISTORY_DB) -> dict:
+    with _history_connect(db_path) as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM dashboard_events ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+    entries = [_row_to_history_entry(row) for row in rows]
+    return {
+        "entries": entries,
+        "summary": summarize_history(entries),
+    }
+
+
+def clear_history(db_path: Path = HISTORY_DB) -> None:
+    with _history_connect(db_path) as conn:
+        conn.execute("DELETE FROM dashboard_events")
 
 
 def normalize_tainted_sources(raw) -> set[str]:
@@ -258,6 +404,9 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 "deepseek": {"env_configured": bool(DEEPSEEK_API_KEY), "model": AGENT_MODEL},
             })
             return
+        if parsed.path == "/api/history":
+            _json_response(self, 200, load_history())
+            return
         self._serve_static(parsed.path)
 
     def do_POST(self):  # noqa: N802
@@ -270,16 +419,28 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 if case is None:
                     _json_response(self, 404, {"error": f"unknown case_id: {case_id}"})
                     return
-                _json_response(self, 200, evaluate_case(case))
+                result = evaluate_case(case)
+                record_history("case", result)
+                _json_response(self, 200, result)
                 return
             if parsed.path == "/api/custom":
-                _json_response(self, 200, evaluate_custom(payload))
+                result = evaluate_custom(payload)
+                record_history("custom", result)
+                _json_response(self, 200, result)
                 return
             if parsed.path == "/api/rerun-surface":
-                _json_response(self, 200, evaluate_surface(str(payload.get("surface_id", ""))))
+                result = evaluate_surface(str(payload.get("surface_id", "")))
+                record_history("surface", result)
+                _json_response(self, 200, result)
                 return
             if parsed.path == "/api/deepseek-redteam":
-                _json_response(self, 200, run_deepseek_redteam(payload))
+                result = run_deepseek_redteam(payload)
+                record_history("deepseek", result)
+                _json_response(self, 200, result)
+                return
+            if parsed.path == "/api/history/clear":
+                clear_history()
+                _json_response(self, 200, load_history())
                 return
             if parsed.path == "/api/run-all":
                 _json_response(self, 200, build_dashboard_summary())

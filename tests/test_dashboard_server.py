@@ -2,10 +2,13 @@
 
 from scripts.dashboard_server import (
     build_dashboard_summary,
+    clear_history,
     evaluate_case,
     evaluate_custom,
     evaluate_surface,
+    load_history,
     normalize_tainted_sources,
+    record_history,
     resolve_static_path,
     run_deepseek_redteam,
 )
@@ -73,6 +76,14 @@ def test_coerce_deepseek_attack_falls_back_to_safe_shape():
     assert isinstance(generated["tool_call"]["input"], dict)
 
 
+def test_coerce_deepseek_attack_adds_default_taint_for_indirect_surface():
+    surface = get_attack_surface("indirect_injection")
+    generated = coerce_deepseek_attack({
+        "tool_call": {"name": "write_file", "input": {"path": "plans/a.txt", "content": "remote plan"}},
+    }, surface)
+    assert generated["tainted_sources"] == ["web_fetch"]
+
+
 def test_deepseek_redteam_path_accepts_fake_generator():
     class FakeGenerator:
         def generate(self, surface):
@@ -91,3 +102,15 @@ def test_deepseek_redteam_path_accepts_fake_generator():
     assert result["mode"] == "deepseek"
     assert result["surface"]["id"] == "training_data_leak"
     assert result["decision"]["action"] == "block"
+
+
+def test_history_store_records_and_summarizes_events(tmp_path):
+    db_path = tmp_path / "history.sqlite3"
+    clear_history(db_path)
+    result = evaluate_surface("memory_poison")
+    record_history("surface", result, db_path=db_path)
+    history = load_history(db_path=db_path)
+    assert history["summary"]["total"] == 1
+    assert history["summary"]["actions"]["block"] == 1
+    assert history["entries"][0]["surface_id"] == "memory_poison"
+    assert "policy" in history["summary"]["layers"]

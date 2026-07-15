@@ -21,6 +21,7 @@ NAME = "taint"
 
 # 视为"高权限"的工具：被污点数据触发时需要拦截/确认
 HIGH_PRIVILEGE_TOOLS = {"run_shell", "write_file"}
+HIGH_RISK_WRITE_PATH_HINTS = ("memory", "profile", "system_prompt", "instructions", "plan", "plans", "config", "policy")
 
 TAINTED_SINK_PATTERNS = [
     (re.compile(r"ignore\s+(all\s+)?previous\s+instructions", re.I), "注入文本要求忽略原指令"),
@@ -126,6 +127,7 @@ class TaintLayer:
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
         if ctx.tainted_sources and call.name in HIGH_PRIVILEGE_TOOLS:
             payload = _flatten_input(call.input)
+            write_path = str(call.input.get("path", "")).lower() if call.name == "write_file" else ""
 
             fragment_matches = [
                 fragment for fragment in ctx.tainted_fragments
@@ -152,6 +154,18 @@ class TaintLayer:
                 return Verdict(
                     NAME, Action.BLOCK,
                     f"疑似污点数据流入高权限动作：{desc}（来源：{', '.join(sorted(ctx.tainted_sources))}）",
+                    confidence=0.8,
+                )
+            if call.name == "run_shell":
+                return Verdict(
+                    NAME, Action.BLOCK,
+                    f"不可信来源触发 shell 执行（来源：{', '.join(sorted(ctx.tainted_sources))}）",
+                    confidence=0.85,
+                )
+            if call.name == "write_file" and any(hint in write_path for hint in HIGH_RISK_WRITE_PATH_HINTS):
+                return Verdict(
+                    NAME, Action.BLOCK,
+                    f"不可信来源写入高风险持久化/计划文件：{write_path}（来源：{', '.join(sorted(ctx.tainted_sources))}）",
                     confidence=0.8,
                 )
             return Verdict(

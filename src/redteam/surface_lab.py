@@ -175,6 +175,11 @@ ATTACK_SURFACES: list[AttackSurfaceSpec] = [
 SURFACE_BY_ID = {surface.id: surface for surface in ATTACK_SURFACES}
 
 ALLOWED_GENERATED_TOOLS = {"run_shell", "read_file", "write_file", "web_fetch", "send_http", "delete_database"}
+DEFAULT_TAINT_BY_SURFACE = {
+    "indirect_injection": ["web_fetch"],
+    "environment_pollution": ["read_file"],
+    "memory_poison": ["web_fetch"],
+}
 
 
 def get_attack_surface(surface_id: str) -> AttackSurfaceSpec:
@@ -233,6 +238,8 @@ def coerce_deepseek_attack(raw: dict[str, Any], surface: AttackSurfaceSpec) -> d
     user_request = str(raw.get("user_request") or surface.offline_case.user_request)
     risk_points = _list_of_strings(raw.get("risk_points")) or list(surface.risk_focus)
     tainted_sources = _list_of_strings(raw.get("tainted_sources"))
+    if not tainted_sources:
+        tainted_sources = list(DEFAULT_TAINT_BY_SURFACE.get(surface.id, []))
     expected = str(raw.get("expected_guardian_action") or "block").lower()
     if expected not in {"allow", "flag", "block"}:
         expected = "block"

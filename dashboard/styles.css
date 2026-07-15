@@ -564,6 +564,28 @@ textarea {
   color: var(--muted);
 }
 
+.audit-entry p {
+  margin: 0;
+  color: #bfccda;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.scope-note {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.empty-state {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--muted);
+  background: #101720;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -571,12 +593,12 @@ textarea {
   .sidebar {
     position: static;
   }
-    .metric-grid,
-    .overview-grid,
-    .surface-layout,
-    .surface-grid,
-    .analysis-grid,
-    .detail-grid,
+  .metric-grid,
+  .overview-grid,
+  .surface-layout,
+  .surface-grid,
+  .analysis-grid,
+  .detail-grid,
   .verdict-strip,
   .form-grid {
     grid-template-columns: 1fr;
