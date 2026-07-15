@@ -32,3 +32,25 @@ Validation:
 - `python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
 - `python -m pytest` could not run in the current machine environment because `pytest` is not installed.
+
+## Stage 2 - Red-team seeds and benchmark loop
+
+Commit message: `feat: add redteam benchmark loop`
+
+Completed scope:
+
+- Expand red-team cases from three placeholders into a mixed attack and benign seed suite.
+- Add key `ToolCall` mappings, tainted-source context, and history context for offline evaluation.
+- Add a tracked `datasets/seed_cases.jsonl` for course deliverables.
+- Improve policy coverage for sensitive credential reads and memory poisoning.
+- Replace the benchmark TODO with recall, false-positive-rate, latency, per-case result rows, and Markdown output.
+- Add `scripts/run_benchmark.py` to generate `report/eval_results.md`.
+- Add benchmark tests for coverage and baseline metrics.
+
+Validation:
+
+- `python scripts\run_benchmark.py` passed and generated `report/eval_results.md`.
+- Manual benchmark assertions passed: 16 total cases, 10/10 attacks detected, 0 blocking false positives.
+- `python -m compileall src scripts tests` passed.
+- `git diff --check` passed.
+- `python -m pytest` could not run in the current machine environment because `pytest` is not installed.

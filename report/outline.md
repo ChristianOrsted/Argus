@@ -32,3 +32,9 @@
 - [ ] 攻击脚本（src/redteam/）
 - [ ] 可演示的智能体行为监督原型系统（src/ + scripts/demo.py + 审计看板）
 - [ ] 评测结果（src/eval/ 产出的检出率/误报率/延时表）
+
+阶段 2 已补充：
+
+- `src/redteam/attacks.py`：红队与良性种子用例，覆盖提示注入、工具劫持、敏感信息读取、间接注入、记忆中毒、环境污染。
+- `datasets/seed_cases.jsonl`：可提交的小型 jsonl 测试集。
+- `scripts/run_benchmark.py`：离线评测脚本，输出 `report/eval_results.md`。

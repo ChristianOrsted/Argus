@@ -21,9 +21,18 @@ DANGEROUS_PATTERNS = [
     (re.compile(r"\brm\s+-rf\b"), "递归强制删除"),
     (re.compile(r":\(\)\s*\{.*\};\s*:"), "fork 炸弹"),
     (re.compile(r"\bcurl\b.*\|\s*(ba)?sh\b"), "下载并直接执行（curl | sh）"),
+    (re.compile(r"\bwget\b.*\|\s*(ba)?sh\b"), "下载并直接执行（wget | sh）"),
     (re.compile(r"\b(nc|ncat|netcat)\b.*-e\b"), "反弹 shell"),
     (re.compile(r"/dev/tcp/"), "bash 反弹 shell"),
     (re.compile(r"\b(mkfs|dd)\b.*of=/dev/"), "磁盘擦写"),
+    (re.compile(r"\b(cat|type|Get-Content)\b.*(\.env|id_rsa|\.ssh|api[_-]?key|token|secret)", re.I), "读取敏感凭据"),
+]
+
+MEMORY_PATH_HINTS = ("memory", "profile", "system_prompt", "instructions")
+PROMPT_INJECTION_PATTERNS = [
+    re.compile(r"ignore\s+(all\s+)?previous\s+instructions", re.I),
+    re.compile(r"system\s+override", re.I),
+    re.compile(r"developer\s+message", re.I),
 ]
 
 
@@ -57,5 +66,14 @@ class PolicyLayer:
             path = str(call.input.get("path", ""))
             if not _is_within_sandbox(path):
                 return Verdict(NAME, Action.BLOCK, f"文件路径越出沙箱：{path}")
+
+        # 记忆中毒：把新的“系统规则/忽略旧规则”写入记忆类文件。
+        if call.name == "write_file":
+            path = str(call.input.get("path", "")).lower()
+            content = str(call.input.get("content", ""))
+            if any(hint in path for hint in MEMORY_PATH_HINTS):
+                for pattern in PROMPT_INJECTION_PATTERNS:
+                    if pattern.search(content):
+                        return Verdict(NAME, Action.BLOCK, "疑似记忆中毒：向记忆/指令文件写入提示注入内容")
 
         return Verdict(NAME, Action.ALLOW)
