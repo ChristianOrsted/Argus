@@ -27,11 +27,11 @@
 
 ## 交付物清单（对应选题要求）
 
-- [x] 风险分析报告（= 报告第 2 章 + docs/architecture.md）
-- [ ] 越狱 / 对抗测试集（datasets/ + src/redteam/attacks.py）
-- [ ] 攻击脚本（src/redteam/）
-- [ ] 可演示的智能体行为监督原型系统（src/ + scripts/demo.py + 审计看板）
-- [ ] 评测结果（src/eval/ 产出的检出率/误报率/延时表）
+- [x] 风险分析报告（= report/final_report.md + docs/architecture.md）
+- [x] 越狱 / 对抗测试集（datasets/seed_cases.jsonl + src/redteam/attacks.py）
+- [x] 攻击脚本（scripts/replay_case.py + scripts/run_benchmark.py）
+- [x] 可演示的智能体行为监督原型系统（src/ + scripts/offline_demo.py + scripts/deepseek_demo.py）
+- [x] 评测结果（report/eval_results.md）
 
 阶段 2 已补充：
 

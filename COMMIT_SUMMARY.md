@@ -77,3 +77,23 @@ Validation:
 - `python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
 - `python -m pytest` could not run in the current machine environment because `pytest` is not installed.
+
+## Stage 4 - Report and reproducible attack replay
+
+Commit message: `docs: add final report and replay workflow`
+
+Completed scope:
+
+- Add `scripts/replay_case.py` to reproduce a single attack or benign case by ID.
+- Add `report/final_report.md` as a course-ready report draft covering threat model, design, implementation, red team, evaluation, demo, limits, and division of work.
+- Update README with replay and benchmark commands.
+- Mark the report outline deliverable checklist as complete with concrete file paths.
+
+Validation:
+
+- `python scripts\replay_case.py ii-001` passed.
+- `python scripts\replay_case.py bn-005` passed.
+- `python scripts\run_benchmark.py` passed and refreshed `report/eval_results.md`.
+- `python -m compileall src scripts tests` passed.
+- `git diff --check` passed.
+- `python -m pytest` could not run in the current machine environment because `pytest` is not installed.
