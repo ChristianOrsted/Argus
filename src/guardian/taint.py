@@ -4,17 +4,18 @@
 当某次高权限动作（写文件、跑 shell、外联）是"被污点数据触发"时，拦截或要求二次确认。
 这是防御【间接提示注入】的关键机制。
 
-实现要点（待 B 同学填充）：
-  - 在 agent 侧，工具返回内容入模型前先登记到 ctx.tainted_sources；
-  - 这里判断当前 call 是否在"读取污点内容之后"发起的高权限动作，并结合参数内容做关联。
-  - 进阶：做真正的数据流跟踪（污点是否流入了 call.input），而非仅时序启发式。
+实现要点：
+  - 在 agent 侧，工具返回内容入模型前登记来源级和片段级污点；
+  - 本层判断当前 call 是否在读取污点内容之后发起高权限动作；
+  - 若具体不可信片段流入 call.input，则给出更强证据并按危险程度 FLAG/BLOCK。
 """
 
 from __future__ import annotations
 
+import hashlib
 import re
 
-from .guardian import Action, Context, ToolCall, Verdict
+from .guardian import Action, Context, TaintedFragment, ToolCall, Verdict
 
 NAME = "taint"
 
@@ -29,6 +30,10 @@ TAINTED_SINK_PATTERNS = [
     (re.compile(r"\b(powershell|pwsh)\b.*(-enc|-encodedcommand)\b", re.I), "污点内容诱导编码命令执行"),
 ]
 
+MAX_FRAGMENT_LEN = 300
+MIN_FRAGMENT_LEN = 12
+MAX_FRAGMENTS_PER_OUTPUT = 12
+
 
 def _flatten_input(value) -> str:
     if isinstance(value, dict):
@@ -38,19 +43,117 @@ def _flatten_input(value) -> str:
     return str(value)
 
 
+def _normalize(value: str) -> str:
+    return re.sub(r"\s+", " ", value).strip().lower()
+
+
+def _digest(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:12]
+
+
+def extract_tainted_fragments(
+    source: str,
+    output: str,
+    origin_tool_use_id: str = "",
+) -> list[TaintedFragment]:
+    """从不可信输出中抽取可追踪片段。
+
+    v1 采用可解释的片段策略：按非空行切分，优先保留命中危险 sink 的行，
+    同时保留少量普通长行，方便后续识别“外部文本被复制进高权限动作”的数据流。
+    """
+
+    candidates: list[str] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if len(line) < MIN_FRAGMENT_LEN:
+            continue
+        candidates.append(line[:MAX_FRAGMENT_LEN])
+
+    dangerous: list[str] = []
+    normal: list[str] = []
+    for line in candidates:
+        if any(pattern.search(line) for pattern, _ in TAINTED_SINK_PATTERNS):
+            dangerous.append(line)
+        else:
+            normal.append(line)
+
+    selected: list[str] = []
+    for line in dangerous + normal:
+        normalized = _normalize(line)
+        if normalized and normalized not in {_normalize(item) for item in selected}:
+            selected.append(line)
+        if len(selected) >= MAX_FRAGMENTS_PER_OUTPUT:
+            break
+
+    return [
+        TaintedFragment(
+            source=source,
+            text=text,
+            digest=_digest(text),
+            origin_tool_use_id=origin_tool_use_id,
+        )
+        for text in selected
+    ]
+
+
+def register_tool_output_taint(ctx: Context, call: ToolCall, output: str) -> None:
+    """登记某次不可信工具输出的来源级和片段级污点。"""
+
+    ctx.tainted_sources.add(call.name)
+    ctx.tainted_fragments.extend(
+        extract_tainted_fragments(call.name, output, origin_tool_use_id=call.tool_use_id)
+    )
+
+
+def _fragment_matches_payload(fragment: TaintedFragment, payload: str) -> bool:
+    fragment_norm = _normalize(fragment.text)
+    payload_norm = _normalize(payload)
+    if len(fragment_norm) < MIN_FRAGMENT_LEN:
+        return False
+    return fragment_norm in payload_norm
+
+
+def _dangerous_text(text: str) -> str:
+    for pattern, desc in TAINTED_SINK_PATTERNS:
+        if pattern.search(text):
+            return desc
+    return ""
+
+
 class TaintLayer:
     name = NAME
 
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
         if ctx.tainted_sources and call.name in HIGH_PRIVILEGE_TOOLS:
             payload = _flatten_input(call.input)
-            for pattern, desc in TAINTED_SINK_PATTERNS:
-                if pattern.search(payload):
-                    return Verdict(
-                        NAME, Action.BLOCK,
-                        f"疑似污点数据流入高权限动作：{desc}（来源：{', '.join(sorted(ctx.tainted_sources))}）",
-                        confidence=0.8,
-                    )
+
+            fragment_matches = [
+                fragment for fragment in ctx.tainted_fragments
+                if _fragment_matches_payload(fragment, payload)
+            ]
+            if fragment_matches:
+                for fragment in fragment_matches:
+                    desc = _dangerous_text(fragment.text) or _dangerous_text(payload)
+                    if desc:
+                        return Verdict(
+                            NAME, Action.BLOCK,
+                            f"污点片段流入高权限动作：{desc}（片段={fragment.digest}, 来源={fragment.source}）",
+                            confidence=0.9,
+                        )
+                evidence = ", ".join(f"{item.source}:{item.digest}" for item in fragment_matches[:3])
+                return Verdict(
+                    NAME, Action.FLAG,
+                    f"检测到不可信文本片段流入高权限动作（{evidence}）",
+                    confidence=0.7,
+                )
+
+            desc = _dangerous_text(payload)
+            if desc:
+                return Verdict(
+                    NAME, Action.BLOCK,
+                    f"疑似污点数据流入高权限动作：{desc}（来源：{', '.join(sorted(ctx.tainted_sources))}）",
+                    confidence=0.8,
+                )
             return Verdict(
                 NAME, Action.FLAG,
                 f"高权限动作发生在读取不可信内容之后（来源：{', '.join(sorted(ctx.tainted_sources))}）",

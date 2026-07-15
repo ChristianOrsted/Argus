@@ -2,14 +2,14 @@
 
 from .anomaly import AnomalyLayer
 from .audit import JsonlAuditLogger, decision_to_record
-from .guardian import Action, Context, Decision, Guardian, ToolCall, Verdict
+from .guardian import Action, Context, Decision, Guardian, TaintedFragment, ToolCall, Verdict
 from .intent import DeepSeekIntentJudge, IntentLayer
 from .policy import PolicyLayer
 from .taint import TaintLayer
 
 __all__ = [
     "Action", "Context", "Decision", "Guardian", "ToolCall", "Verdict",
-    "DeepSeekIntentJudge", "JsonlAuditLogger", "build_default_guardian", "decision_to_record",
+    "DeepSeekIntentJudge", "JsonlAuditLogger", "TaintedFragment", "build_default_guardian", "decision_to_record",
 ]
 
 

@@ -68,7 +68,7 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 Guardian 四层防御：
 
 - `PolicyLayer`：确定性规则层。拦截危险 shell、未知工具、沙箱外文件读写、敏感凭据读取、记忆中毒写入。
-- `TaintLayer`：污点追踪层。把 `web_fetch`、`read_file` 视为不可信来源；不可信内容影响高权限动作时告警或阻断。
+- `TaintLayer`：污点追踪层。把 `web_fetch`、`read_file` 视为不可信来源；同时抽取具体文本片段、摘要和来源工具调用 ID。若片段流入 `run_shell` / `write_file` 等高权限动作，则按证据告警或阻断。
 - `IntentLayer`：意图一致性层。提供可插拔 judge 接口和 `DeepSeekIntentJudge`，用于判断工具调用是否符合用户原始意图。默认关闭，避免离线演示依赖 API Key。
 - `AnomalyLayer`：序列异常层。当前实现重复工具调用检测，后续可扩展为 n-gram 或 Markov 行为模型。
 
@@ -257,6 +257,13 @@ ARGUS_AGENT_MODEL=deepseek-chat
 - DeepSeek intent judge smoke test：通过，对“只要求总结网页却执行 `rm -rf /`”的工具调用返回不一致
 
 DeepSeek API Key 仅通过运行时隐藏输入临时注入，没有写入脚本、文档、`.env` 或提交历史。
+
+2026-07-15 片段级污点追踪增强后已重新验证：
+
+- `.\.venv\Scripts\python -m pytest`：24 passed
+- `.\.venv\Scripts\python scripts\offline_demo.py`：通过
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：通过，10/10 攻击检出，0 阻断型误报
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
 
 ## 7. 后续还能增强什么
 

@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from ..config import AGENT_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
 from ..guardian.guardian import Action, Context, Guardian, ToolCall
+from ..guardian.taint import register_tool_output_taint
 from .tools import OPENAI_TOOLS, UNTRUSTED_SOURCE_TOOLS, execute_tool
 
 DEFAULT_SYSTEM = "You are a helpful assistant with access to shell, file, and web tools."
@@ -106,7 +107,7 @@ class DeepSeekReActAgent:
 
                 output = execute_tool(call.name, call.input)
                 if call.name in UNTRUSTED_SOURCE_TOOLS:
-                    ctx.tainted_sources.add(call.name)
+                    register_tool_output_taint(ctx, call, output)
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call["id"],

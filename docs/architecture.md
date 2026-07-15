@@ -48,10 +48,11 @@ Argus 是一个面向 LLM Agent 的旁路行为监督器。它不试图替代模
 污点追踪层，负责防御间接提示注入：
 
 - `web_fetch` 和 `read_file` 的返回视为不可信来源。
+- Agent 登记来源级污点，同时抽取片段级污点：`source`、`text`、`digest`、`origin_tool_use_id`。
 - 读取不可信来源后，如果马上执行 `run_shell` 或 `write_file`，至少 `FLAG`。
-- 如果高权限动作参数中出现忽略指令、下载执行、删除、凭据等危险模式，则 `BLOCK`。
+- 如果具体污点片段流入高权限动作参数，并命中忽略指令、下载执行、删除、凭据等危险模式，则 `BLOCK`。
 
-后续阶段应将 `ctx.tainted_sources` 从来源集合升级为具体片段、摘要、哈希和 sink 证据。
+当前阶段已经把 `ctx.tainted_sources` 扩展为 `ctx.tainted_fragments`，可在审计日志中追踪片段摘要和来源工具调用。
 
 ### 3.3 IntentLayer
 

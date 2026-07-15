@@ -23,6 +23,15 @@ def decision_to_record(call: ToolCall, ctx: Context, decision: Decision, event: 
         "context": {
             "history_len": len(ctx.history),
             "tainted_sources": sorted(ctx.tainted_sources),
+            "tainted_fragments": [
+                {
+                    "source": fragment.source,
+                    "digest": fragment.digest,
+                    "preview": fragment.text[:120],
+                    "origin_tool_use_id": fragment.origin_tool_use_id,
+                }
+                for fragment in ctx.tainted_fragments
+            ],
         },
         "decision": {
             "action": decision.action.value,

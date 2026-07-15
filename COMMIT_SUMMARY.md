@@ -118,3 +118,23 @@ Validation:
 - `.\.venv\Scripts\python -m compileall src scripts tests` passed.
 - DeepSeek online Agent smoke test passed with a temporary runtime key; no key was written to tracked files.
 - DeepSeek online intent judge smoke test passed with a temporary runtime key; no key was written to tracked files.
+
+## Stage 6 - Fragment-level taint tracking
+
+Commit message: `feat: add fragment-level taint tracking`
+
+Completed scope:
+
+- Add `TaintedFragment` to Guardian context.
+- Extract tainted snippets from `web_fetch` and `read_file` outputs with source, digest, and origin tool id.
+- Register fragment-level taint from both DeepSeek and Anthropic agent loops.
+- Upgrade `TaintLayer` to detect exact tainted-fragment flow into high-privilege tool inputs.
+- Include tainted fragment evidence in JSONL audit records.
+- Add tests for fragment extraction, registration, BLOCK, and FLAG paths.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 24 tests passed.
+- `.\.venv\Scripts\python scripts\offline_demo.py` passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
