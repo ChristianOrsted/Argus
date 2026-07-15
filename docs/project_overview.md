@@ -103,6 +103,7 @@ Guardian 四层防御：
 - `scripts/run_benchmark.py`
 - `scripts/run_intent_judge_eval.py`
 - `scripts/convert_public_jailbreaks.py`
+- `scripts/dashboard_server.py`
 - `scripts/deepseek_demo.py`
 
 作用：
@@ -112,6 +113,7 @@ Guardian 四层防御：
 - `run_benchmark.py`：运行全部种子样本，输出检出率、误报率和延时。
 - `run_intent_judge_eval.py`：调用真实 DeepSeek intent judge，在线评测工具调用与用户意图是否一致。
 - `convert_public_jailbreaks.py`：把 AdvBench/JailbreakBench 风格公开数据集转换为 Argus jsonl。
+- `dashboard_server.py`：启动本地网页 Dashboard，展示样本、统计、逐层 Verdict 和自定义评估。
 - `deepseek_demo.py`：有 DeepSeek API Key 时，运行真实在线 Agent demo。
 
 ### 3.5 报告与结果

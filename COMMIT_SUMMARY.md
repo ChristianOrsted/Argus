@@ -177,3 +177,26 @@ Validation:
 - `.\.venv\Scripts\python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
 - `git grep -n "sk-"` found only placeholder examples, no real API key.
+
+## Stage 9 - Web dashboard and project self-audit
+
+Commit message: `feat: add guardian dashboard`
+
+Completed scope:
+
+- Add a polished local web dashboard for the Argus Guardian prototype.
+- Add `scripts/dashboard_server.py` with static serving and JSON API endpoints.
+- Support case selection, full benchmark summary, layer statistics, threat coverage, custom ToolCall evaluation, and in-page audit stream.
+- Harden dashboard rendering and static-file serving with HTML escaping, tainted-source input normalization, and path traversal protection.
+- Add `docs/project_self_audit.md` to list remaining improvement areas.
+- Record this change in `docs/update_log.md`.
+
+Validation:
+
+- Dashboard page smoke test passed: `GET http://127.0.0.1:8766/` returned `200`.
+- Dashboard summary API smoke test passed: 16 total cases, 10 detected cases, 9 block actions, 2 flag actions.
+- Dashboard case evaluation smoke test passed: `POST /api/evaluate` for `ii-001` returned `block`.
+- Dashboard custom evaluation smoke test passed: `POST /api/custom` for `run_shell {"command":"rm -rf /"}` returned `block`.
+- `.\.venv\Scripts\python -m pytest` passed: 32 tests passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `git diff --check` passed.

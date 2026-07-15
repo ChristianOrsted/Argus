@@ -75,7 +75,10 @@ python scripts\run_benchmark.py
 # 7. 转换公开越狱集样例
 python scripts\convert_public_jailbreaks.py datasets\public_samples\advbench_sample.csv datasets\public_jailbreak_seed.jsonl --source advbench
 
-# 8. 跑测试
+# 8. 启动网页 Dashboard
+python scripts\dashboard_server.py
+
+# 9. 跑测试
 pytest
 ```
 

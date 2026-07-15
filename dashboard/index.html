@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Argus Guardian Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">A</div>
+        <div>
+          <h1>Argus</h1>
+          <p>Agent Behavior Guardian</p>
+        </div>
+      </div>
+
+      <nav class="nav-list" aria-label="Dashboard sections">
+        <a href="#overview" class="nav-item active">总览</a>
+        <a href="#cases" class="nav-item">红队样本</a>
+        <a href="#custom" class="nav-item">自定义评估</a>
+        <a href="#layers" class="nav-item">防御层</a>
+        <a href="#audit" class="nav-item">审计流</a>
+      </nav>
+
+      <div class="side-note">
+        <span class="status-dot"></span>
+        <span>本地 Guardian API 已连接</span>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">LLM Agent Security Prototype</p>
+          <h2>智能体行为监督原型系统</h2>
+        </div>
+        <div class="top-actions">
+          <button id="refreshBtn" class="icon-button" title="刷新统计" aria-label="刷新统计">
+            <span class="icon-refresh"></span>
+          </button>
+          <button id="runAllBtn" class="primary-button">运行全量评测</button>
+        </div>
+      </header>
+
+      <section id="overview" class="metric-grid">
+        <article class="metric-card danger">
+          <span class="metric-label">攻击检出</span>
+          <strong id="detectedMetric">--</strong>
+          <small id="recallMetric">recall --</small>
+        </article>
+        <article class="metric-card warn">
+          <span class="metric-label">告警样本</span>
+          <strong id="flagMetric">--</strong>
+          <small>FLAG but not blocked</small>
+        </article>
+        <article class="metric-card safe">
+          <span class="metric-label">阻断样本</span>
+          <strong id="blockMetric">--</strong>
+          <small>BLOCK decisions</small>
+        </article>
+        <article class="metric-card info">
+          <span class="metric-label">平均延时</span>
+          <strong id="latencyMetric">--</strong>
+          <small>local evaluation</small>
+        </article>
+      </section>
+
+      <section class="overview-grid">
+        <article class="panel" id="cases">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Red Team Corpus</p>
+              <h3>攻击面样本</h3>
+            </div>
+            <select id="categoryFilter" class="select">
+              <option value="all">全部类别</option>
+            </select>
+          </div>
+          <div id="caseList" class="case-list"></div>
+        </article>
+
+        <article class="panel decision-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Guardian Decision</p>
+              <h3 id="selectedTitle">选择一个样本</h3>
+            </div>
+            <span id="decisionPill" class="decision-pill neutral">WAITING</span>
+          </div>
+
+          <div class="detail-grid">
+            <div>
+              <span class="field-label">用户请求</span>
+              <p id="userRequest" class="detail-text">--</p>
+            </div>
+            <div>
+              <span class="field-label">工具调用</span>
+              <pre id="toolCall" class="code-block">{}</pre>
+            </div>
+          </div>
+
+          <div class="verdict-strip" id="verdictStrip"></div>
+        </article>
+      </section>
+
+      <section class="analysis-grid">
+        <article class="panel" id="layers">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Layer Statistics</p>
+              <h3>四层防御统计</h3>
+            </div>
+          </div>
+          <div id="layerStats" class="layer-stats"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Threat Coverage</p>
+              <h3>攻击面覆盖</h3>
+            </div>
+          </div>
+          <div id="coverageGrid" class="coverage-grid"></div>
+        </article>
+      </section>
+
+      <section id="custom" class="panel custom-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Custom ToolCall Lab</p>
+            <h3>自定义工具调用评估</h3>
+          </div>
+          <button id="customRunBtn" class="primary-button">评估自定义调用</button>
+        </div>
+        <div class="form-grid">
+          <label>
+            <span>用户原始请求</span>
+            <textarea id="customRequest">请总结网页内容，不要执行系统命令。</textarea>
+          </label>
+          <label>
+            <span>工具</span>
+            <select id="customTool" class="select">
+              <option value="run_shell">run_shell</option>
+              <option value="read_file">read_file</option>
+              <option value="write_file">write_file</option>
+              <option value="web_fetch">web_fetch</option>
+            </select>
+          </label>
+          <label class="wide">
+            <span>工具参数 JSON</span>
+            <textarea id="customInput">{"command":"rm -rf /"}</textarea>
+          </label>
+          <label>
+            <span>污点来源</span>
+            <select id="customTaint" class="select">
+              <option value="">无</option>
+              <option value="web_fetch">web_fetch</option>
+              <option value="read_file">read_file</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section id="audit" class="panel audit-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Audit Stream</p>
+            <h3>交互审计记录</h3>
+          </div>
+          <button id="clearAuditBtn" class="ghost-button">清空</button>
+        </div>
+        <div id="auditLog" class="audit-log"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
