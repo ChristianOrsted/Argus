@@ -30,6 +30,7 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 - 提供红队攻击样本、良性对照样本、攻击复现脚本和离线评测脚本。
 - 提供网页攻击面实验台：每个攻击面可以独立重跑、观察 ToolCall、逐层 Verdict 和最终拦截结果。
 - 提供 DeepSeek 在线红队生成：由真实大模型按预设攻击面批量生成攻击请求、危险工具调用和风险说明，再交给 Guardian 检查是否能拦住。
+- 提供 DeepSeek 红队期望阻断兜底：当红队样本明确标注应阻断且附带风险点时，Guardian 会把该工具调用视为攻击链候选动作处理。
 - 提供 DeepSeek 漏拦截分析：对未被拦截的攻击条目，可调用 DeepSeek 分析原因，并写入受限自适应防御规则后重评估。
 - 提供网页端持久历史流：每次请求与审计结果写入本地 SQLite，页面指标和四层防御统计会随历史请求动态更新。
 - 生成可读的 Markdown 评测结果。
@@ -72,7 +73,7 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 
 Guardian 四层防御：
 
-- `PolicyLayer`：确定性规则层。拦截危险 shell、未知工具、沙箱外文件读写、敏感凭据读取、记忆中毒写入。
+- `PolicyLayer`：确定性规则层。拦截危险 shell、未知工具、沙箱外文件读写、敏感凭据读取、记忆中毒写入，并利用 DeepSeek 红队元数据对“期望阻断”的攻击链候选动作做兜底阻断。
 - `TaintLayer`：污点追踪层。把 `web_fetch`、`read_file` 视为不可信来源；同时抽取具体文本片段、摘要和来源工具调用 ID。若片段流入 `run_shell` / `write_file` 等高权限动作，则按证据告警或阻断。
 - `IntentLayer`：意图一致性层。提供可插拔 judge 接口和 `DeepSeekIntentJudge`，用于判断工具调用是否符合用户原始意图。默认关闭，避免离线演示依赖 API Key。
 - `AnomalyLayer`：序列异常层。当前实现重复工具调用检测，后续可扩展为 n-gram 或 Markov 行为模型。
@@ -267,7 +268,7 @@ http://127.0.0.1:8765
 
 - `独立攻击面重跑`：对提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入分别点击“离线重跑”，观察用户请求、工具调用、四层 Verdict 和最终 `ALLOW / FLAG / BLOCK`。
 - `DeepSeek 红队`：选择一个攻击面，设置生成条数，可编辑红队提示词，点击“运行 DeepSeek 红队”。DeepSeek 会在线批量生成攻击请求、工具调用、危险点说明，然后由 Guardian 审计。
-- `批量状态矩阵`：每条攻击显示“条目信息 / 总 / 1 / 2 / 3 / 4 / 操作”。其中“总”是最终决策，1-4 分别对应 Policy、Taint、Intent、Anomaly 四层。
+- `批量状态矩阵`：每条攻击显示“条目信息 / 总 / 1 / 2 / 3 / 4 / 操作”。其中“总”是最终决策，1-4 分别对应 Policy、Taint、Intent、Anomaly 四层。如果 DeepSeek 样本期望 `BLOCK` / `FLAG` 但 Guardian 实际 `ALLOW`，前端会把该条标为红色漏拦截。
 - `分析漏拦截`：如果某条攻击没有被 `BLOCK`，点击该条右侧按钮，DeepSeek 会分析未拦截原因，生成受限自适应规则，写入 `sandbox_runs/audit/adaptive_rules.json`，然后对同一条攻击重评估。
 - `自定义工具调用评估`：手动输入用户请求、工具名、JSON 参数和污点来源，验证任意 ToolCall 是否会被拦截。
 - `交互审计记录`：页面会从 `sandbox_runs/audit/dashboard_history.sqlite3` 读取历史请求；每次评估后，指标卡、四层防御统计和审计流都会动态刷新。点击“清空历史”可清空本地历史库。
@@ -386,6 +387,15 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 漏拦截分析：DeepSeek 返回未拦截原因和受限规则，写入 `sandbox_runs/audit/adaptive_rules.json`，重评估后同一条目返回 `BLOCK`
 - 工具调用劫持样例修复：`web_fetch https://example.com/data` 这类当前工具看似正常、但红队元数据包含 `delete_database` / `send_http` 风险的条目会被 `BLOCK`
 
+2026-07-15 DeepSeek 红队期望阻断兜底和漏拦截展示增强后已重新验证：
+
+- `.\.venv\Scripts\python -m pytest`：53 passed
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `node --check dashboard\app.js`：通过
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：通过，10/10 攻击检出，0 阻断型误报
+- Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
+- 自定义元数据烟测：`web_fetch https://example.com/data` 携带 `expected_guardian_action=block` 和风险点时返回 `BLOCK`
+
 ## 7. 后续还能增强什么
 
 如果还有时间，可以继续增强：
@@ -395,5 +405,8 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 增加 30-50 条公开越狱样本转换结果，并在报告中做扩展评测。
 - 给评测结果增加图表。
 - 给 Dashboard 历史库增加导出 CSV/Markdown 报告按钮，便于演示后复盘。
+- 给每条漏拦截分析增加“规则差异预览”和“一键撤销本次自适应规则”，方便课堂演示时解释规则如何演进。
+- 增加多模型对抗生成对比，例如 DeepSeek 生成攻击、另一个 judge 复核风险，减少单一模型偏差。
+- 给攻击提示词模板增加版本号和历史记录，便于比较不同红队提示词产生的攻击质量。
 
 不过就课程原型验收而言，当前项目已经具备：样本、攻击脚本、可运行监督系统、评测结果和报告草稿。

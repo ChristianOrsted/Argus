@@ -371,9 +371,11 @@ def evaluate_custom(payload: dict) -> dict:
         name=str(payload.get("tool_name") or payload.get("name") or "run_shell"),
         input=payload.get("input") if isinstance(payload.get("input"), dict) else {},
     )
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
     ctx = Context(
         user_request=str(payload.get("user_request") or "自定义工具调用评估"),
         tainted_sources=normalize_tainted_sources(payload.get("tainted_sources")),
+        metadata=metadata,
     )
     start = perf_counter()
     decision = build_default_guardian().evaluate(call, ctx)
@@ -394,6 +396,7 @@ def evaluate_custom(payload: dict) -> dict:
         "context": {
             "tainted_sources": sorted(ctx.tainted_sources),
             "history_len": 0,
+            "metadata": ctx.metadata,
         },
     }
 

@@ -563,6 +563,17 @@ textarea,
   background: #172131;
 }
 
+.batch-row.missed {
+  border-color: rgba(255, 107, 107, .72);
+  background: #21151a;
+}
+
+.batch-row.missed:hover,
+.batch-row.missed.active {
+  border-color: var(--red);
+  background: #2b1820;
+}
+
 .batch-title {
   min-width: 0;
 }

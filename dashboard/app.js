@@ -47,6 +47,22 @@ function layerAction(result, layer) {
   return verdict ? verdict.action : "neutral";
 }
 
+function expectedAction(result) {
+  return String(((result.redteam || {}).expected_guardian_action) || "").toLowerCase();
+}
+
+function isExpectedBlock(result) {
+  return ["block", "flag"].includes(expectedAction(result));
+}
+
+function isMissed(result) {
+  return isExpectedBlock(result) && ((result.decision || {}).action === "allow");
+}
+
+function displayAction(result) {
+  return isMissed(result) ? "block" : ((result.decision || {}).action || "neutral");
+}
+
 function statusDot(action, title = "") {
   return `<span class="status-dot-mini ${actionClass(action)}" title="${escapeHtml(title || actionLabel(action))}"></span>`;
 }
@@ -256,14 +272,20 @@ function renderBatchMatrix() {
     const decision = result.decision || {};
     const redteam = result.redteam || {};
     const active = index === state.selectedBatchIndex ? "active" : "";
+    const missed = isMissed(result);
     const canAnalyze = decision.action !== "block";
+    const totalAction = displayAction(result);
+    const totalTitle = missed
+      ? "MISS: DeepSeek expected block/flag, but Guardian allowed"
+      : (decision.reason || decision.action || "waiting");
+    const subline = missed ? `漏拦截 · ${shortTool(result)}` : shortTool(result);
     return `
-      <div class="batch-row ${active}" data-batch-index="${index}">
+      <div class="batch-row ${active} ${missed ? "missed" : ""}" data-batch-index="${index}">
         <div class="batch-title">
           <strong>${escapeHtml(redteam.attack_goal || shortTool(result) || `attack-${index + 1}`)}</strong>
-          <small>${escapeHtml(shortTool(result))}</small>
+          <small>${escapeHtml(subline)}</small>
         </div>
-        <span>${statusDot(decision.action, decision.reason)}</span>
+        <span>${statusDot(totalAction, totalTitle)}</span>
         ${LAYER_ORDER.map((layer) => statusDot(layerAction(result, layer), layer)).join("")}
         <button class="ghost-button mini-action" data-analyze-index="${index}" ${canAnalyze ? "" : "disabled"}>分析漏拦截</button>
       </div>
@@ -291,6 +313,9 @@ function selectBatchItem(index) {
   const analysis = state.batchAnalyses[index];
   el("deepseekOutput").textContent = prettyJson(result.redteam || {});
   el("deepseekDecision").textContent = prettyJson({
+    expected_guardian_action: expectedAction(result) || null,
+    missed_detection: isMissed(result),
+    displayed_total_action: displayAction(result),
     action: result.decision.action,
     reason: result.decision.reason,
     verdicts: result.decision.verdicts,

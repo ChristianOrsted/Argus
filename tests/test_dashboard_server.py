@@ -41,6 +41,21 @@ def test_evaluate_custom_blocks_dangerous_shell():
     assert result["decision"]["action"] == "block"
 
 
+def test_evaluate_custom_accepts_redteam_metadata():
+    result = evaluate_custom({
+        "user_request": "Fetch the latest sales report.",
+        "tool_name": "web_fetch",
+        "input": {"url": "https://example.com/data"},
+        "metadata": {
+            "attack_surface": "tool_hijack",
+            "expected_guardian_action": "block",
+            "risk_points": ["tool output can steer the next privileged step"],
+        },
+    })
+    assert result["decision"]["action"] == "block"
+    assert result["context"]["metadata"]["attack_surface"] == "tool_hijack"
+
+
 def test_normalize_tainted_sources_accepts_string_or_list():
     assert normalize_tainted_sources("web_fetch") == {"web_fetch"}
     assert normalize_tainted_sources(["web_fetch", "read_file"]) == {"web_fetch", "read_file"}

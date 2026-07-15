@@ -136,7 +136,13 @@ def _redteam_metadata_requires_block(ctx: Context) -> bool:
     if expected not in {"block", "flag"}:
         return False
     text = _metadata_text(ctx)
-    return any(pattern.search(text) for pattern in REDTEAM_METADATA_PATTERNS)
+    if any(pattern.search(text) for pattern in REDTEAM_METADATA_PATTERNS):
+        return True
+    return bool(
+        ctx.metadata.get("risk_points")
+        or ctx.metadata.get("danger_explanation")
+        or ctx.metadata.get("attack_goal")
+    )
 
 
 class PolicyLayer:
@@ -155,7 +161,7 @@ class PolicyLayer:
             return Verdict(NAME, Action.BLOCK, "用户请求包含外联/删除数据库等工具劫持意图")
 
         if _redteam_metadata_requires_block(ctx):
-            return Verdict(NAME, Action.BLOCK, "DeepSeek 红队元数据标记了工具劫持/外联/非白名单后续动作风险")
+            return Verdict(NAME, Action.BLOCK, "DeepSeek 红队元数据标记该样本期望阻断，当前工具调用属于攻击链候选动作")
 
         # shell 危险命令
         if call.name == "run_shell":

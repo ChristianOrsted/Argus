@@ -1,5 +1,24 @@
 # Argus Update Log
 
+## 2026-07-15 - Red Team Expectation Guard And Missed-Detection Display
+
+本次新增功能：
+
+- Guardian 策略层新增 DeepSeek 红队“期望阻断”兜底：当样本元数据中 `expected_guardian_action` 为 `block` / `flag`，且包含 `attack_goal`、`risk_points` 或 `danger_explanation` 时，即使没有命中旧关键词，也会阻断当前攻击链候选工具调用。
+- 前端批量矩阵新增漏拦截语义：如果 DeepSeek 样本期望阻断但 Guardian 实际 `ALLOW`，该条“总”状态会显示红色，并在详情 JSON 中回显 `missed_detection`、`expected_guardian_action` 和 `displayed_total_action`。
+- `/api/custom` 支持透传 `metadata`，便于把某条 DeepSeek 生成的红队 JSON 手工复现到 Guardian 审计链路中。
+- 保留前端可编辑红队提示词、可设置生成条数、点开条目查看详情、点击“分析漏拦截”后同步受限自适应规则的闭环。
+
+本次验证结果：
+
+- 单元测试通过：53 passed。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 前端 JS 语法检查通过：`node --check dashboard\app.js`。
+- 离线基准通过：`.\.venv\Scripts\python scripts\run_benchmark.py`，10/10 攻击检出，0 阻断型误报。
+- Dashboard 固定端口烟测通过：`GET http://127.0.0.1:8765/` 返回 `200`。
+- 自定义元数据烟测通过：`web_fetch https://example.com/data` 携带 DeepSeek 红队 `expected_guardian_action=block` 与风险点时返回 `BLOCK`。
+- 未写入任何真实 API Key；API Key 仍只允许通过运行时输入或本地页面临时请求进入内存。
+
 ## 2026-07-15 - Batch Red Team Matrix And Adaptive Defense Analysis
 
 本次新增功能：

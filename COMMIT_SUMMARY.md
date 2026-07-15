@@ -281,3 +281,25 @@ Validation:
 - DeepSeek batch red-team smoke test passed: `tool_hijack` generated 2 attacks and both returned `block` with per-layer statuses.
 - DeepSeek missed-detection analysis smoke test passed: DeepSeek produced a reason and one constrained adaptive rule; rechecking the same item returned `block`.
 - API key was provided only through hidden runtime input or a local ephemeral request and was not written to tracked files.
+
+## Stage 13 - Red-team expectation guard and missed-detection display
+
+Commit message: `feat: add redteam expectation guard`
+
+Completed scope:
+
+- Add a PolicyLayer fallback for DeepSeek red-team metadata: generated samples with `expected_guardian_action` set to `block` / `flag` and risk payload are treated as attack-chain candidates even if they do not contain the older hard-coded keywords.
+- Update the DeepSeek batch matrix so rows whose expected action is block/flag but whose Guardian decision is allow are displayed as missed detections with a red total status.
+- Add selected-row details for `expected_guardian_action`, `missed_detection`, and `displayed_total_action`.
+- Allow `/api/custom` to accept and return `metadata`, so DeepSeek-generated red-team JSON can be manually replayed through the same Guardian context.
+- Update README, project overview, and update log with the new workflow and validation record.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 53 tests passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 10/10 attacks detected and 0 blocking false positives.
+- Dashboard fixed-port smoke test passed: `GET http://127.0.0.1:8765/` returned `200`.
+- Custom metadata smoke test passed: `web_fetch https://example.com/data` with `expected_guardian_action=block` and risk points returned `block`.
+- API key was not written to tracked files.
