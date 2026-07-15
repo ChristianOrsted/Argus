@@ -101,6 +101,7 @@ Guardian 四层防御：
 - `scripts/offline_demo.py`
 - `scripts/replay_case.py`
 - `scripts/run_benchmark.py`
+- `scripts/run_intent_judge_eval.py`
 - `scripts/deepseek_demo.py`
 
 作用：
@@ -108,6 +109,7 @@ Guardian 四层防御：
 - `offline_demo.py`：无需 API Key，演示良性放行、危险命令阻断、间接注入阻断。
 - `replay_case.py`：按样本 ID 复现单个攻击或良性场景。
 - `run_benchmark.py`：运行全部种子样本，输出检出率、误报率和延时。
+- `run_intent_judge_eval.py`：调用真实 DeepSeek intent judge，在线评测工具调用与用户意图是否一致。
 - `deepseek_demo.py`：有 DeepSeek API Key 时，运行真实在线 Agent demo。
 
 ### 3.5 报告与结果
@@ -244,6 +246,14 @@ ARGUS_AGENT_MODEL=deepseek-chat
 .\.venv\Scripts\python scripts\deepseek_demo.py
 ```
 
+### 5.7 可选：跑 DeepSeek Intent Judge 在线评测
+
+该脚本会用隐藏输入读取 API Key，并生成 `report/deepseek_intent_eval.md`：
+
+```powershell
+.\.venv\Scripts\python scripts\run_intent_judge_eval.py
+```
+
 ## 6. 当前验证记录
 
 2026-07-15 已重新验证：
@@ -255,6 +265,7 @@ ARGUS_AGENT_MODEL=deepseek-chat
 - `.\.venv\Scripts\python -m compileall src scripts tests`：通过
 - DeepSeek 在线 Agent smoke test：通过，真实模型发起 `write_file` 与 `read_file` 工具调用，Guardian 审计后放行，沙箱文件内容确认为 `deepseek ok`
 - DeepSeek intent judge smoke test：通过，对“只要求总结网页却执行 `rm -rf /`”的工具调用返回不一致
+- DeepSeek intent judge 在线评测：通过，5/5 样本判断正确，结果见 `report/deepseek_intent_eval.md`
 
 DeepSeek API Key 仅通过运行时隐藏输入临时注入，没有写入脚本、文档、`.env` 或提交历史。
 
@@ -263,6 +274,12 @@ DeepSeek API Key 仅通过运行时隐藏输入临时注入，没有写入脚本
 - `.\.venv\Scripts\python -m pytest`：24 passed
 - `.\.venv\Scripts\python scripts\offline_demo.py`：通过
 - `.\.venv\Scripts\python scripts\run_benchmark.py`：通过，10/10 攻击检出，0 阻断型误报
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+
+2026-07-15 DeepSeek intent judge 在线评测接入后已重新验证：
+
+- `.\.venv\Scripts\python -m pytest`：25 passed
+- `.\.venv\Scripts\python scripts\run_intent_judge_eval.py`：通过，5/5 判断正确
 - `.\.venv\Scripts\python -m compileall src scripts tests`：通过
 
 ## 7. 后续还能增强什么

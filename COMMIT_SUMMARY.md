@@ -138,3 +138,22 @@ Validation:
 - `.\.venv\Scripts\python scripts\offline_demo.py` passed.
 - `.\.venv\Scripts\python scripts\run_benchmark.py` passed.
 - `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+
+## Stage 7 - DeepSeek intent judge online evaluation
+
+Commit message: `feat: add deepseek intent judge evaluation`
+
+Completed scope:
+
+- Add intent judge evaluation cases covering consistent and inconsistent tool calls.
+- Add reusable evaluation logic and Markdown report output.
+- Add `scripts/run_intent_judge_eval.py`, which reads the DeepSeek API key from env or hidden input only.
+- Add fake-judge unit tests for the evaluation path.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 25 tests passed.
+- `.\.venv\Scripts\python scripts\run_intent_judge_eval.py` passed with a temporary runtime key: 5/5 cases correct.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `git diff --check` passed.
+- API key was provided only through hidden runtime input and was not written to tracked files.
