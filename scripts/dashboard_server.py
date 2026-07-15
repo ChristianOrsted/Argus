@@ -16,9 +16,17 @@ from urllib.parse import unquote, urlparse
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from src.config import AGENT_MODEL, DEEPSEEK_API_KEY
 from src.eval.benchmark import evaluate_guardian
-from src.guardian import Action, Context, ToolCall, build_default_guardian
+from src.guardian import Context, DeepSeekIntentJudge, ToolCall, build_default_guardian
 from src.redteam.attacks import EVAL_CASES, AttackCase
+from src.redteam.surface_lab import (
+    ATTACK_SURFACES,
+    DeepSeekRedTeamGenerator,
+    generated_attack_to_case,
+    get_attack_surface,
+    serialize_surface,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "dashboard"
@@ -91,8 +99,8 @@ def resolve_static_path(request_path: str) -> Path | None:
     return target if target.is_file() else None
 
 
-def evaluate_case(case: AttackCase) -> dict:
-    guardian = build_default_guardian()
+def evaluate_case(case: AttackCase, guardian=None) -> dict:
+    guardian = guardian or build_default_guardian()
     ctx = _case_context(case)
     start = perf_counter()
     decision = guardian.evaluate(case.tool_call, ctx)
@@ -105,6 +113,34 @@ def evaluate_case(case: AttackCase) -> dict:
             "tainted_sources": sorted(ctx.tainted_sources),
             "history_len": len(ctx.history),
         },
+    }
+
+
+def evaluate_surface(surface_id: str) -> dict:
+    surface = get_attack_surface(surface_id)
+    result = evaluate_case(surface.offline_case)
+    return {
+        "mode": "offline",
+        "surface": serialize_surface(surface),
+        **result,
+    }
+
+
+def run_deepseek_redteam(payload: dict, generator=None) -> dict:
+    surface = get_attack_surface(str(payload.get("surface_id", "")))
+    api_key = str(payload.get("api_key") or "")
+    use_intent_judge = bool(payload.get("use_intent_judge"))
+    generator = generator or DeepSeekRedTeamGenerator(api_key=api_key or DEEPSEEK_API_KEY)
+    generated = generator.generate(surface)
+    case = generated_attack_to_case(surface, generated)
+    intent_client = DeepSeekIntentJudge(api_key=api_key or DEEPSEEK_API_KEY) if use_intent_judge else None
+    result = evaluate_case(case, guardian=build_default_guardian(intent_client=intent_client))
+    return {
+        "mode": "deepseek",
+        "surface": serialize_surface(surface),
+        "redteam": generated,
+        "intent_judge_enabled": use_intent_judge,
+        **result,
     }
 
 
@@ -179,6 +215,11 @@ def build_dashboard_summary() -> dict:
         },
         "cases": [serialize_case(case) for case in EVAL_CASES],
         "results": rows,
+        "attack_surfaces": [serialize_surface(surface) for surface in ATTACK_SURFACES],
+        "deepseek": {
+            "env_configured": bool(DEEPSEEK_API_KEY),
+            "model": AGENT_MODEL,
+        },
     }
 
 
@@ -211,6 +252,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/cases":
             _json_response(self, 200, {"cases": [serialize_case(case) for case in EVAL_CASES]})
             return
+        if parsed.path == "/api/attack-surfaces":
+            _json_response(self, 200, {
+                "attack_surfaces": [serialize_surface(surface) for surface in ATTACK_SURFACES],
+                "deepseek": {"env_configured": bool(DEEPSEEK_API_KEY), "model": AGENT_MODEL},
+            })
+            return
         self._serve_static(parsed.path)
 
     def do_POST(self):  # noqa: N802
@@ -227,6 +274,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/custom":
                 _json_response(self, 200, evaluate_custom(payload))
+                return
+            if parsed.path == "/api/rerun-surface":
+                _json_response(self, 200, evaluate_surface(str(payload.get("surface_id", ""))))
+                return
+            if parsed.path == "/api/deepseek-redteam":
+                _json_response(self, 200, run_deepseek_redteam(payload))
                 return
             if parsed.path == "/api/run-all":
                 _json_response(self, 200, build_dashboard_summary())

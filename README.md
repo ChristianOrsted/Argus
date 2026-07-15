@@ -75,7 +75,7 @@ python scripts\run_benchmark.py
 # 7. 转换公开越狱集样例
 python scripts\convert_public_jailbreaks.py datasets\public_samples\advbench_sample.csv datasets\public_jailbreak_seed.jsonl --source advbench
 
-# 8. 启动网页 Dashboard
+# 8. 启动网页 Dashboard：攻击面实验台 + DeepSeek 在线红队
 python scripts\dashboard_server.py
 
 # 9. 跑测试
@@ -88,6 +88,8 @@ pytest
 - DeepSeek OpenAI-compatible API（默认模型 `deepseek-chat`，可在 `.env` 里改）
 - [Anthropic SDK](https://pypi.org/project/anthropic/)（保留旧版 Claude demo 兼容入口）
 - `rich`（终端审计看板）、`pytest`
+
+Dashboard 启动后打开 `http://127.0.0.1:8765`。页面支持 7 个独立攻击面离线重跑，也支持临时输入 DeepSeek API Key 进行在线红队生成；Key 只用于本地请求，不会写入项目文件。
 
 ## 路线图（4 周）
 

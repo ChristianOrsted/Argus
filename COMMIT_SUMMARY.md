@@ -200,3 +200,28 @@ Validation:
 - `.\.venv\Scripts\python -m pytest` passed: 32 tests passed.
 - `.\.venv\Scripts\python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
+
+## Stage 10 - Attack surface lab and DeepSeek red-team dashboard
+
+Commit message: `feat: add deepseek redteam dashboard lab`
+
+Completed scope:
+
+- Add `src/redteam/surface_lab.py` with seven independent attack-surface specs.
+- Cover prompt injection, model jailbreak, training-data leakage, tool hijacking, memory poisoning, environment pollution, and indirect prompt injection.
+- Add Dashboard APIs for attack-surface listing, offline per-surface rerun, and DeepSeek-generated red-team runs.
+- Extend the frontend with an attack-surface lab where every surface can be rerun independently.
+- Extend the frontend with a DeepSeek Red Team panel that shows generated attack request, generated ToolCall, risk points, danger explanation, and Guardian decision.
+- Support optional DeepSeek intent judge during the dashboard red-team run.
+- Update `docs/project_overview.md`, `README.md`, and `docs/update_log.md` with the new operating workflow.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 36 tests passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- Dashboard page smoke test passed: `GET /` returned `200`.
+- Attack-surface API smoke test passed: `GET /api/attack-surfaces` returned 7 surfaces.
+- Offline per-surface rerun smoke test passed: `memory_poison` returned `block`.
+- DeepSeek online red-team smoke test passed: `prompt_injection` generated `delete_database`, Guardian returned `block`.
+- DeepSeek online red-team with intent judge smoke test passed: `tool_hijack` generated `run_shell`, Guardian returned `block`.
+- API key was provided only through hidden runtime input or a local ephemeral request and was not written to tracked files.

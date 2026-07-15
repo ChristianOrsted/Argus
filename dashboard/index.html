@@ -19,6 +19,7 @@
 
       <nav class="nav-list" aria-label="Dashboard sections">
         <a href="#overview" class="nav-item active">总览</a>
+        <a href="#surfaceLab" class="nav-item">攻击面实验台</a>
         <a href="#cases" class="nav-item">红队样本</a>
         <a href="#custom" class="nav-item">自定义评估</a>
         <a href="#layers" class="nav-item">防御层</a>
@@ -65,6 +66,53 @@
           <span class="metric-label">平均延时</span>
           <strong id="latencyMetric">--</strong>
           <small>local evaluation</small>
+        </article>
+      </section>
+
+      <section id="surfaceLab" class="surface-layout">
+        <article class="panel surface-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Attack Surface Lab</p>
+              <h3>独立攻击面重跑</h3>
+            </div>
+            <span id="deepseekStatus" class="tag benign">DeepSeek: checking</span>
+          </div>
+          <div id="surfaceGrid" class="surface-grid"></div>
+        </article>
+
+        <article class="panel deepseek-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">DeepSeek Red Team</p>
+              <h3>在线生成攻击样本</h3>
+            </div>
+            <button id="deepseekRunBtn" class="primary-button">运行 DeepSeek 红队</button>
+          </div>
+          <div class="deepseek-controls">
+            <label>
+              <span>攻击面</span>
+              <select id="deepseekSurface" class="select"></select>
+            </label>
+            <label>
+              <span>DeepSeek API Key（可留空使用服务器环境变量）</span>
+              <input id="deepseekKey" class="text-input" type="password" autocomplete="off" placeholder="仅本次请求使用，不保存">
+            </label>
+            <label class="toggle-row">
+              <input id="deepseekIntent" type="checkbox">
+              <span>同时启用 DeepSeek intent judge</span>
+            </label>
+          </div>
+          <div class="generated-grid">
+            <div>
+              <span class="field-label">DeepSeek 生成的攻击说明</span>
+              <pre id="deepseekOutput" class="code-block tall">{}</pre>
+            </div>
+            <div>
+              <span class="field-label">Guardian 检测结果</span>
+              <pre id="deepseekDecision" class="code-block tall">{}</pre>
+            </div>
+          </div>
         </article>
       </section>
 

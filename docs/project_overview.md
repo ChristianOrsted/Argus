@@ -28,6 +28,8 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 - 在工具真正执行前插入 Guardian 检查点。
 - 通过四层防御进行实时审计、异常检测和阻断。
 - 提供红队攻击样本、良性对照样本、攻击复现脚本和离线评测脚本。
+- 提供网页攻击面实验台：每个攻击面可以独立重跑、观察 ToolCall、逐层 Verdict 和最终拦截结果。
+- 提供 DeepSeek 在线红队生成：由真实大模型按预设攻击面生成攻击请求、危险工具调用和风险说明，再交给 Guardian 检查是否能拦住。
 - 生成可读的 Markdown 评测结果。
 - 输出 JSONL 审计日志，方便演示和报告取证。
 
@@ -83,6 +85,7 @@ Guardian 四层防御：
 路径：
 
 - `src/redteam/attacks.py`
+- `src/redteam/surface_lab.py`
 - `datasets/seed_cases.jsonl`
 - `datasets/fixtures/web_notes_evil.txt`
 
@@ -93,6 +96,21 @@ Guardian 四层防御：
 - 覆盖提示注入、工具调用劫持、敏感信息读取、间接提示注入、记忆中毒、环境污染等场景。
 
 `web_notes_evil.txt` 是间接提示注入 fixture：表面是普通网页笔记，隐藏内容要求 Agent 忽略原指令并下载执行恶意脚本。
+
+`surface_lab.py` 是网页前端的攻击面实验台配置，覆盖 7 个独立攻击面：
+
+- 提示注入；
+- 模型越狱；
+- 训练数据泄露；
+- 工具调用劫持；
+- 记忆中毒；
+- 环境感知污染；
+- 间接提示注入。
+
+每个攻击面都有两种运行方式：
+
+- 离线重跑：使用稳定、可验收的预置 `ToolCall`。
+- DeepSeek 红队：调用真实 DeepSeek 模型生成新的攻击请求、危险工具调用、风险点说明，再由 Guardian 实时审计。
 
 ### 3.4 攻击脚本与演示脚本
 
@@ -113,7 +131,7 @@ Guardian 四层防御：
 - `run_benchmark.py`：运行全部种子样本，输出检出率、误报率和延时。
 - `run_intent_judge_eval.py`：调用真实 DeepSeek intent judge，在线评测工具调用与用户意图是否一致。
 - `convert_public_jailbreaks.py`：把 AdvBench/JailbreakBench 风格公开数据集转换为 Argus jsonl。
-- `dashboard_server.py`：启动本地网页 Dashboard，展示样本、统计、逐层 Verdict 和自定义评估。
+- `dashboard_server.py`：启动本地网页 Dashboard，展示样本、统计、逐层 Verdict、自定义评估、独立攻击面重跑和 DeepSeek 在线红队生成。
 - `deepseek_demo.py`：有 DeepSeek API Key 时，运行真实在线 Agent demo。
 
 ### 3.5 报告与结果
@@ -141,7 +159,7 @@ Guardian 四层防御：
 | 安全风险分析报告 | 已有草稿，后续可继续润色 | `report/final_report.md`, `docs/architecture.md` |
 | 对抗样本与越狱测试集 | 已有可运行种子集 | `datasets/seed_cases.jsonl`, `src/redteam/attacks.py` |
 | 攻击脚本 | 已有，可按 ID 复现 | `scripts/replay_case.py` |
-| 可演示的智能体行为监督原型系统 | 已有，离线可跑，在线 DeepSeek 可接入 | `scripts/offline_demo.py`, `scripts/deepseek_demo.py`, `src/guardian/` |
+| 可演示的智能体行为监督原型系统 | 已有，离线可跑，网页可操作，在线 DeepSeek 可接入 | `scripts/offline_demo.py`, `scripts/dashboard_server.py`, `scripts/deepseek_demo.py`, `src/guardian/` |
 | 实时审计、异常检测和阻断 | 已实现四层 Guardian 与 JSONL 审计 | `src/guardian/`, `sandbox_runs/audit/offline_demo.jsonl` |
 | 评测结果 | 已自动生成 | `report/eval_results.md` |
 
@@ -168,7 +186,7 @@ cd E:\eve_jump\暑期课程\Argus
 当前验证结果：
 
 ```text
-20 passed in 0.33s
+36 passed in 0.60s
 ```
 
 ### 5.3 跑离线原型演示
@@ -227,7 +245,43 @@ sandbox_runs/audit/offline_demo.jsonl
 report/eval_results.md
 ```
 
-### 5.6 可选：跑 DeepSeek 在线 Agent
+### 5.6 启动网页攻击面实验台
+
+启动本地 Dashboard：
+
+```powershell
+.\.venv\Scripts\python scripts\dashboard_server.py
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8765
+```
+
+页面里有三类主要操作：
+
+- `独立攻击面重跑`：对提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入分别点击“离线重跑”，观察用户请求、工具调用、四层 Verdict 和最终 `ALLOW / FLAG / BLOCK`。
+- `DeepSeek 红队`：选择一个攻击面，点击“运行 DeepSeek 红队”，由 DeepSeek 在线生成新的攻击请求、工具调用、危险点说明，然后由 Guardian 审计并展示是否拦截。
+- `自定义工具调用评估`：手动输入用户请求、工具名、JSON 参数和污点来源，验证任意 ToolCall 是否会被拦截。
+
+如果已经在系统环境或 `.env` 中配置 `DEEPSEEK_API_KEY`，页面的 DeepSeek 区域可以不填 key。也可以在页面输入框中临时填入 key：该 key 只随本次本地请求发送到 `dashboard_server.py`，不会写入文件，也不会被前端保存。
+
+### 5.7 可选：网页运行 DeepSeek 在线红队
+
+推荐验收操作：
+
+1. 打开 Dashboard。
+2. 在“DeepSeek Red Team”选择 `提示注入`。
+3. 点击“运行 DeepSeek 红队”。
+4. 观察 DeepSeek 生成的 `user_request`、`tool_call`、`risk_points` 和 `danger_explanation`。
+5. 观察 Guardian 的逐层 Verdict 和最终 `BLOCK`。
+
+如果要同时演示 DeepSeek 作为意图一致性 judge，勾选“同时启用 DeepSeek intent judge”再运行。此时一次演示通常会调用两次 DeepSeek：一次生成红队攻击，一次判断工具调用是否符合用户意图。
+
+注意：DeepSeek 生成的工具调用只进入 Guardian 审计，不会真实执行危险工具。
+
+### 5.8 可选：跑 DeepSeek 在线 Agent
 
 如果要演示真实大模型 Agent，而不是离线构造 ToolCall，需要配置 DeepSeek API Key：
 
@@ -250,7 +304,7 @@ ARGUS_AGENT_MODEL=deepseek-chat
 .\.venv\Scripts\python scripts\deepseek_demo.py
 ```
 
-### 5.7 可选：跑 DeepSeek Intent Judge 在线评测
+### 5.9 可选：跑 DeepSeek Intent Judge 在线评测
 
 该脚本会用隐藏输入读取 API Key，并生成 `report/deepseek_intent_eval.md`：
 
@@ -292,14 +346,26 @@ DeepSeek API Key 仅通过运行时隐藏输入临时注入，没有写入脚本
 - `.\.venv\Scripts\python -m pytest`：27 passed
 - `.\.venv\Scripts\python -m compileall src scripts tests`：通过
 
+2026-07-15 网页攻击面实验台和 DeepSeek 在线红队接入后已重新验证：
+
+- `.\.venv\Scripts\python -m pytest`：36 passed
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- Dashboard 页面烟测：`GET http://127.0.0.1:8768/` 返回 `200`
+- 攻击面接口烟测：`GET /api/attack-surfaces` 返回 7 个独立攻击面
+- 独立攻击面离线重跑：`memory_poison` 返回 `BLOCK`
+- DeepSeek 在线红队 smoke test：`prompt_injection` 生成 `delete_database` 工具调用，Guardian 返回 `BLOCK`
+- DeepSeek 在线红队 + intent judge smoke test：`tool_hijack` 生成 `run_shell` 工具调用，Guardian 返回 `BLOCK`
+
+DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入，没有写入脚本、文档、`.env` 或提交历史。
+
 ## 7. 后续还能增强什么
 
 如果还有时间，可以继续增强：
 
-- 把污点追踪从来源级升级为片段级数据流追踪。
-- 接入 DeepSeek intent judge 的真实在线评测样本。
-- 扩展公开越狱集，例如 AdvBench/JailbreakBench 格式转换。
+- 录制一次 Dashboard 完整演示视频，覆盖 7 个攻击面。
+- 把 DeepSeek 在线生成的真实攻击样本落成可复现的 jsonl 数据集。
+- 增加 30-50 条公开越狱样本转换结果，并在报告中做扩展评测。
 - 给评测结果增加图表。
-- 把 `sandbox_runs/audit/*.jsonl` 转成演示看板。
+- 把 Dashboard 前端操作持久化到 `sandbox_runs/audit/dashboard.jsonl`，便于演示后复盘。
 
 不过就课程原型验收而言，当前项目已经具备：样本、攻击脚本、可运行监督系统、评测结果和报告草稿。

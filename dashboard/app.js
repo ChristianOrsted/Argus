@@ -2,6 +2,7 @@ const state = {
   data: null,
   selectedCaseId: null,
   audit: [],
+  busy: false,
 };
 
 const el = (id) => document.getElementById(id);
@@ -131,6 +132,49 @@ function renderCoverage() {
   `).join("");
 }
 
+function renderDeepSeekStatus() {
+  const status = state.data.deepseek || {};
+  const node = el("deepseekStatus");
+  node.className = `tag ${status.env_configured ? "benign" : "attack"}`;
+  node.textContent = status.env_configured
+    ? `DeepSeek env: ${status.model}`
+    : "DeepSeek env: not set";
+}
+
+function renderSurfaceLab() {
+  const surfaces = state.data.attack_surfaces || [];
+  const grid = el("surfaceGrid");
+  grid.innerHTML = surfaces.map((surface) => `
+    <article class="surface-card">
+      <div class="case-line">
+        <h4>${escapeHtml(surface.title)}</h4>
+        <span class="tag attack">${escapeHtml(surface.category)}</span>
+      </div>
+      <p>${escapeHtml(surface.description)}</p>
+      <div class="surface-focus">
+        ${surface.risk_focus.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join("")}
+      </div>
+      <div class="surface-actions">
+        <button class="ghost-button" data-rerun-surface="${escapeHtml(surface.id)}">离线重跑</button>
+        <button class="primary-button" data-deepseek-surface="${escapeHtml(surface.id)}">DeepSeek 红队</button>
+      </div>
+    </article>
+  `).join("");
+  grid.querySelectorAll("[data-rerun-surface]").forEach((node) => {
+    node.addEventListener("click", () => rerunSurface(node.dataset.rerunSurface));
+  });
+  grid.querySelectorAll("[data-deepseek-surface]").forEach((node) => {
+    node.addEventListener("click", () => runDeepSeekRedTeam(node.dataset.deepseekSurface));
+  });
+
+  const select = el("deepseekSurface");
+  const current = select.value || (surfaces[0] && surfaces[0].id) || "";
+  select.innerHTML = surfaces.map((surface) => (
+    `<option value="${escapeHtml(surface.id)}">${escapeHtml(surface.title)}</option>`
+  )).join("");
+  select.value = surfaces.some((surface) => surface.id === current) ? current : ((surfaces[0] && surfaces[0].id) || "");
+}
+
 function renderDecision(result) {
   const caseData = result.case;
   const decision = result.decision;
@@ -169,12 +213,60 @@ async function runAll() {
   addAudit("benchmark", "allow", "全量评测完成", `${state.data.summary.detected}/${state.data.summary.attacks} attacks detected`);
 }
 
+async function rerunSurface(surfaceId) {
+  try {
+    const result = await api("/api/rerun-surface", {
+      method: "POST",
+      body: JSON.stringify({ surface_id: surfaceId }),
+    });
+    renderDecision(result);
+    addAudit(result.surface.title, result.decision.action, "独立攻击面离线重跑完成", result.mode);
+  } catch (err) {
+    addAudit("surface-lab", "block", "攻击面重跑失败", err.message);
+  }
+}
+
+async function runDeepSeekRedTeam(surfaceId) {
+  const selectedSurface = surfaceId || el("deepseekSurface").value;
+  el("deepseekSurface").value = selectedSurface;
+  el("deepseekOutput").textContent = "DeepSeek 正在生成红队样本...";
+  el("deepseekDecision").textContent = "等待 Guardian 审计...";
+  el("deepseekRunBtn").disabled = true;
+  try {
+    const result = await api("/api/deepseek-redteam", {
+      method: "POST",
+      body: JSON.stringify({
+        surface_id: selectedSurface,
+        api_key: el("deepseekKey").value,
+        use_intent_judge: el("deepseekIntent").checked,
+      }),
+    });
+    el("deepseekOutput").textContent = prettyJson(result.redteam);
+    el("deepseekDecision").textContent = prettyJson({
+      action: result.decision.action,
+      reason: result.decision.reason,
+      verdicts: result.decision.verdicts,
+      latency_ms: result.latency_ms,
+      intent_judge_enabled: result.intent_judge_enabled,
+    });
+    renderDecision(result);
+    addAudit(result.surface.title, result.decision.action, "DeepSeek 在线红队完成", result.redteam.danger_explanation);
+  } catch (err) {
+    el("deepseekDecision").textContent = err.message;
+    addAudit("deepseek", "block", "DeepSeek 红队调用失败", err.message);
+  } finally {
+    el("deepseekRunBtn").disabled = false;
+  }
+}
+
 function renderAll() {
   renderMetrics();
   renderFilters();
   renderCaseList();
   renderLayerStats();
   renderCoverage();
+  renderDeepSeekStatus();
+  renderSurfaceLab();
   const selected = state.data.results.find((item) => item.case.id === state.selectedCaseId);
   if (selected) {
     renderDecision(selected);
@@ -233,6 +325,7 @@ function bindEvents() {
   el("refreshBtn").addEventListener("click", loadSummary);
   el("runAllBtn").addEventListener("click", runAll);
   el("customRunBtn").addEventListener("click", evaluateCustom);
+  el("deepseekRunBtn").addEventListener("click", () => runDeepSeekRedTeam());
   el("clearAuditBtn").addEventListener("click", () => {
     state.audit = [];
     renderAudit();

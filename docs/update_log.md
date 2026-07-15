@@ -1,5 +1,40 @@
 # Argus Update Log
 
+## 2026-07-15 - Attack Surface Lab And DeepSeek Red Team Dashboard
+
+本次新增功能：
+
+- 新增 `src/redteam/surface_lab.py`，把提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入整理为 7 个独立攻击面。
+- Dashboard 新增“独立攻击面重跑”区域，每个攻击面都可以单独离线重跑，并观察用户请求、工具调用、四层 Verdict 和最终动作。
+- Dashboard 新增“DeepSeek Red Team”区域，可以选择攻击面，让 DeepSeek 在线生成攻击请求、危险工具调用、风险点和危险说明。
+- DeepSeek 生成的工具调用只交给 Guardian 审计，不会真实执行危险工具。
+- DeepSeek 红队区域支持可选启用 DeepSeek intent judge，用同一个运行时 key 对生成工具调用做意图一致性判断。
+- 新增 Dashboard API：`GET /api/attack-surfaces`、`POST /api/rerun-surface`、`POST /api/deepseek-redteam`。
+- 更新 `docs/project_overview.md`，补充新前端操作方式和验收流程。
+
+验收方式：
+
+```powershell
+.\.venv\Scripts\python scripts\dashboard_server.py
+```
+
+浏览器打开：
+
+```text
+http://127.0.0.1:8765
+```
+
+本次验证结果：
+
+- 单元测试通过：36 passed。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 页面入口通过：`GET /` 返回 `200`。
+- 攻击面接口通过：返回 7 个独立攻击面。
+- 独立攻击面离线重跑通过：`memory_poison` 返回 `block`。
+- DeepSeek 在线红队通过：`prompt_injection` 生成 `delete_database`，Guardian 返回 `block`。
+- DeepSeek 在线红队 + intent judge 通过：`tool_hijack` 生成 `run_shell`，Guardian 返回 `block`。
+- 真实 API Key 只通过隐藏输入或本地页面临时请求进入内存，没有写入项目文件。
+
 ## 2026-07-15 - Web Dashboard And Project Self Audit
 
 本次新增功能：
