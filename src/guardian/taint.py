@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import re
+
 from .guardian import Action, Context, ToolCall, Verdict
 
 NAME = "taint"
@@ -19,18 +21,39 @@ NAME = "taint"
 # 视为"高权限"的工具：被污点数据触发时需要拦截/确认
 HIGH_PRIVILEGE_TOOLS = {"run_shell", "write_file"}
 
+TAINTED_SINK_PATTERNS = [
+    (re.compile(r"ignore\s+(all\s+)?previous\s+instructions", re.I), "注入文本要求忽略原指令"),
+    (re.compile(r"\b(curl|wget)\b.*\|\s*(ba)?sh\b", re.I), "污点内容诱导下载并执行"),
+    (re.compile(r"\brm\s+-rf\b", re.I), "污点内容诱导破坏性删除"),
+    (re.compile(r"\b(id_rsa|api[_-]?key|token|secret)\b", re.I), "污点内容诱导处理敏感凭据"),
+    (re.compile(r"\b(powershell|pwsh)\b.*(-enc|-encodedcommand)\b", re.I), "污点内容诱导编码命令执行"),
+]
+
+
+def _flatten_input(value) -> str:
+    if isinstance(value, dict):
+        return " ".join(_flatten_input(v) for v in value.values())
+    if isinstance(value, (list, tuple, set)):
+        return " ".join(_flatten_input(v) for v in value)
+    return str(value)
+
 
 class TaintLayer:
     name = NAME
 
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
-        # TODO(B): 实现污点传播判定。
-        #   v1（时序启发式）：若 ctx 中存在污点来源，且本次是高权限工具 → FLAG。
-        #   v2（数据流）：检查污点文本是否实际出现在 call.input 中 → BLOCK。
         if ctx.tainted_sources and call.name in HIGH_PRIVILEGE_TOOLS:
+            payload = _flatten_input(call.input)
+            for pattern, desc in TAINTED_SINK_PATTERNS:
+                if pattern.search(payload):
+                    return Verdict(
+                        NAME, Action.BLOCK,
+                        f"疑似污点数据流入高权限动作：{desc}（来源：{', '.join(sorted(ctx.tainted_sources))}）",
+                        confidence=0.8,
+                    )
             return Verdict(
                 NAME, Action.FLAG,
-                f"高权限动作发生在读取不可信内容之后（来源：{', '.join(ctx.tainted_sources)}）",
+                f"高权限动作发生在读取不可信内容之后（来源：{', '.join(sorted(ctx.tainted_sources))}）",
                 confidence=0.5,
             )
         return Verdict(NAME, Action.ALLOW)

@@ -54,21 +54,25 @@ python -m venv .venv
 # 2. 装依赖
 pip install -r requirements.txt
 
-# 3. 配置 API Key（复制模板后填入自己的 key）
+# 3. 先跑离线 demo（不需要 API Key）
+python scripts\offline_demo.py
+
+# 4. 配置 DeepSeek API Key（复制模板后填入自己的 key）
 Copy-Item .env.example .env
-#   然后编辑 .env，填 ANTHROPIC_API_KEY=sk-ant-...
+#   然后编辑 .env，填 DEEPSEEK_API_KEY=sk-...
 
-# 4. 跑 demo（让 Agent 在 Guardian 监督下执行一个任务）
-python -m scripts.demo
+# 5. 跑 DeepSeek 在线 demo（让 Agent 在 Guardian 监督下执行一个任务）
+python scripts\deepseek_demo.py
 
-# 5. 跑测试
+# 6. 跑测试
 pytest
 ```
 
 ## 技术栈
 
 - Python 3.10+
-- [Anthropic SDK](https://pypi.org/project/anthropic/)（Claude API，模型默认 `claude-opus-4-8`，可在 `.env` 里改）
+- DeepSeek OpenAI-compatible API（默认模型 `deepseek-chat`，可在 `.env` 里改）
+- [Anthropic SDK](https://pypi.org/project/anthropic/)（保留旧版 Claude demo 兼容入口）
 - `rich`（终端审计看板）、`pytest`
 
 ## 路线图（4 周）

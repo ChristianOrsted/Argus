@@ -1,8 +1,10 @@
-# Claude API（Agent 与 LLM-judge 都通过它调用模型）
+# 旧版 Claude API 兼容入口（scripts/demo.py）
 anthropic>=0.40
 
 # 读取 .env 里的 ANTHROPIC_API_KEY
 python-dotenv>=1.0
+
+# DeepSeek 阶段使用标准库 urllib 调用 OpenAI-compatible API，暂不额外依赖 SDK。
 
 # 终端审计看板 / 彩色输出
 rich>=13.0

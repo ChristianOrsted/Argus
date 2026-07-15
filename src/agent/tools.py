@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from urllib.request import Request, urlopen
 
-from ..config import SANDBOX_DIR
+from ..config import FIXTURE_DIR, SANDBOX_DIR
 
 # ---- 给 Claude 的工具 schema（messages.create 的 tools 参数）----
 TOOLS = [
@@ -54,6 +55,19 @@ TOOLS = [
     },
 ]
 
+# DeepSeek 使用 OpenAI-compatible tool calling 格式。
+OPENAI_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": tool["name"],
+            "description": tool["description"],
+            "parameters": tool["input_schema"],
+        },
+    }
+    for tool in TOOLS
+]
+
 # 经过 Guardian 后才会被工具返回标记为"不可信源"的工具（供污点层登记）
 UNTRUSTED_SOURCE_TOOLS = {"web_fetch", "read_file"}
 
@@ -78,7 +92,21 @@ def execute_tool(name: str, tool_input: dict) -> str:
         return f"已写入 {p}"
 
     if name == "web_fetch":
-        # TODO(A): 用 requests/httpx 真正抓取；demo 阶段可返回固定内容或本地 fixture。
-        return f"(TODO: 抓取 {tool_input['url']} 的内容)"
+        url = str(tool_input["url"])
+        if url.startswith("fixture://"):
+            fixture_name = url.removeprefix("fixture://").lstrip("/\\")
+            p = (FIXTURE_DIR / fixture_name).resolve()
+            if not p.is_relative_to(FIXTURE_DIR.resolve()):
+                return f"fixture 路径越界：{fixture_name}"
+            return p.read_text(encoding="utf-8", errors="replace")
+
+        if url.startswith(("http://", "https://")):
+            req = Request(url, headers={"User-Agent": "ArgusGuardian/0.1"})
+            with urlopen(req, timeout=10) as resp:
+                body = resp.read(20000)
+                charset = resp.headers.get_content_charset() or "utf-8"
+            return body.decode(charset, errors="replace")
+
+        return f"不支持的 URL 协议：{url}"
 
     return f"未知工具：{name}"
