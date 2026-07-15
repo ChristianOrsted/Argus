@@ -97,3 +97,24 @@ Validation:
 - `python -m compileall src scripts tests` passed.
 - `git diff --check` passed.
 - `python -m pytest` could not run in the current machine environment because `pytest` is not installed.
+
+## Stage 5 - Project overview and pytest verification
+
+Commit message: `docs: add project overview and verification guide`
+
+Completed scope:
+
+- Add `docs/project_overview.md` as a top-level explanation of project goal, modules, deliverables, and acceptance workflow.
+- Link the overview from `README.md`.
+- Refresh `report/eval_results.md` from the latest benchmark run.
+- Re-run validation after pytest was installed in `.venv`.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 20 tests passed.
+- `.\.venv\Scripts\python scripts\offline_demo.py` passed.
+- `.\.venv\Scripts\python scripts\replay_case.py ii-001` passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- DeepSeek online Agent smoke test passed with a temporary runtime key; no key was written to tracked files.
+- DeepSeek online intent judge smoke test passed with a temporary runtime key; no key was written to tracked files.
