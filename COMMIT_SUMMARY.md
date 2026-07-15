@@ -303,3 +303,27 @@ Validation:
 - Dashboard fixed-port smoke test passed: `GET http://127.0.0.1:8765/` returned `200`.
 - Custom metadata smoke test passed: `web_fetch https://example.com/data` with `expected_guardian_action=block` and risk points returned `block`.
 - API key was not written to tracked files.
+
+## Stage 14 - DeepSeek dashboard connectivity and prompt sync
+
+Commit message: `fix: repair deepseek dashboard connectivity diagnostics`
+
+Completed scope:
+
+- Fix the DeepSeek Red Team prompt box so changing the attack surface refreshes the visible default prompt for that surface.
+- Preserve user-edited prompt text while avoiding stale prompt text from a previously selected attack surface.
+- Improve frontend API error rendering so JSON errors are shown as readable messages.
+- Wrap DeepSeek red-team generation and missed-detection analysis network errors with actionable diagnostics.
+- Add a specific `WinError 10013` diagnostic for Python processes that lack outbound network permission.
+- Restart the local Dashboard on fixed port `8765` with outbound network permission for live DeepSeek testing.
+
+Validation:
+
+- `.\.venv\Scripts\python -m pytest` passed: 54 tests passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `node --check dashboard\app.js` passed.
+- Restricted default execution reproduced `WinError 10013` and returned the new actionable diagnostic.
+- Network-enabled DeepSeek smoke test passed: `model_jailbreak` generated `run_shell` with expected action `block`.
+- Dashboard batch endpoint passed with the real API path: `model_jailbreak` generated 3 attacks and all 3 returned `block`.
+- Dashboard batch endpoint with DeepSeek intent judge passed: `tool_hijack` generated 1 attack, `intent_judge_enabled=True`, final action `block`.
+- API key was provided only through hidden runtime input and was not written to tracked files.

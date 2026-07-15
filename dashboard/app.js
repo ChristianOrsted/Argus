@@ -6,6 +6,8 @@ const state = {
   batchResults: [],
   batchAnalyses: {},
   selectedBatchIndex: null,
+  promptDirty: false,
+  promptSurfaceId: null,
   busy: false,
 };
 
@@ -74,7 +76,14 @@ async function api(path, options = {}) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`${res.status} ${text}`);
+    let message = text;
+    try {
+      const parsed = JSON.parse(text);
+      message = parsed.error || text;
+    } catch (err) {
+      message = text;
+    }
+    throw new Error(`${res.status} ${message}`);
   }
   return res.json();
 }
@@ -248,12 +257,25 @@ function renderSurfaceLab() {
     `<option value="${escapeHtml(surface.id)}">${escapeHtml(surface.title)}</option>`
   )).join("");
   select.value = surfaces.some((surface) => surface.id === current) ? current : ((surfaces[0] && surfaces[0].id) || "");
-  syncPromptPlaceholder();
+  syncPromptText();
 }
 
-function syncPromptPlaceholder() {
+function currentDeepSeekSurface() {
   const surface = (state.data.attack_surfaces || []).find((item) => item.id === el("deepseekSurface").value);
-  el("deepseekPrompt").placeholder = surface ? surface.prompt : "留空则使用默认红队提示词";
+  return surface || null;
+}
+
+function syncPromptText(force = false) {
+  const surface = currentDeepSeekSurface();
+  const prompt = surface ? surface.prompt : "";
+  const textarea = el("deepseekPrompt");
+  textarea.placeholder = prompt || "留空则使用默认红队提示词";
+  const surfaceChanged = surface && state.promptSurfaceId !== surface.id;
+  if (force || !state.promptDirty || surfaceChanged || !textarea.value.trim()) {
+    textarea.value = prompt;
+    state.promptDirty = false;
+    state.promptSurfaceId = surface ? surface.id : null;
+  }
 }
 
 function shortTool(result) {
@@ -378,6 +400,9 @@ async function rerunSurface(surfaceId) {
 async function runDeepSeekRedTeam(surfaceId) {
   const selectedSurface = surfaceId || el("deepseekSurface").value;
   el("deepseekSurface").value = selectedSurface;
+  if (surfaceId) {
+    syncPromptText(true);
+  }
   el("deepseekOutput").textContent = "DeepSeek 正在批量生成红队样本...";
   el("deepseekDecision").textContent = "等待 Guardian 批量审计...";
   el("deepseekRunBtn").disabled = true;
@@ -523,7 +548,11 @@ function bindEvents() {
   el("runAllBtn").addEventListener("click", runAll);
   el("customRunBtn").addEventListener("click", evaluateCustom);
   el("deepseekRunBtn").addEventListener("click", () => runDeepSeekRedTeam());
-  el("deepseekSurface").addEventListener("change", syncPromptPlaceholder);
+  el("deepseekSurface").addEventListener("change", () => syncPromptText(true));
+  el("deepseekPrompt").addEventListener("input", () => {
+    state.promptDirty = true;
+    state.promptSurfaceId = el("deepseekSurface").value;
+  });
   el("clearAuditBtn").addEventListener("click", () => {
     state.audit = [];
     api("/api/history/clear", { method: "POST", body: "{}" })

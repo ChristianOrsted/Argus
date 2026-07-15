@@ -1,5 +1,25 @@
 # Argus Update Log
 
+## 2026-07-16 - DeepSeek Dashboard Connectivity And Prompt Sync Fix
+
+本次修复：
+
+- 修复 DeepSeek Red Team 前端切换攻击面后，提示词文本框仍停留在上一个攻击面的默认提示词问题。现在首次加载、下拉切换攻击面、点击攻击面卡片运行 DeepSeek 红队时，都会同步显示当前攻击面的默认提示词；用户手动编辑后会保留修改。
+- 改进前端 API 错误展示：服务端返回 JSON 错误时，页面会显示整理后的错误消息，而不是直接显示原始 `500 {"error": ...}`。
+- 改进 DeepSeek 红队生成和漏拦截分析的网络错误诊断：遇到 Windows `WinError 10013` 时，会明确提示“当前 Python 进程或系统权限阻止出站网络”，提示需要用有出站网络权限的终端启动 Dashboard。
+
+本次验证结果：
+
+- 单元测试通过：54 passed。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 前端 JS 语法检查通过：`node --check dashboard\app.js`。
+- 受限默认执行环境复现 `WinError 10013`，错误消息已被包装为可操作中文诊断。
+- 带出站网络权限的真实 DeepSeek smoke test 通过：`model_jailbreak` 生成 `run_shell`，期望动作 `block`。
+- Dashboard 固定端口已用带出站网络权限的进程重启。
+- 真实 Dashboard 批量接口通过：`model_jailbreak` 一次生成 3 条，3 条均返回 `block`。
+- 真实 Dashboard 批量接口 + DeepSeek intent judge 通过：`tool_hijack` 生成 1 条，`intent_judge_enabled=True`，最终返回 `block`。
+- 真实 API Key 只通过运行时隐藏输入进入内存，没有写入项目文件。
+
 ## 2026-07-15 - Red Team Expectation Guard And Missed-Detection Display
 
 本次新增功能：

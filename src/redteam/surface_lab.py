@@ -14,6 +14,7 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from ..config import AGENT_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
@@ -216,6 +217,23 @@ def _extract_json_object(content: str) -> dict[str, Any]:
         return json.loads(match.group(0))
 
 
+def _deepseek_error_message(exc: Exception) -> str:
+    if isinstance(exc, HTTPError):
+        body = exc.read().decode("utf-8", errors="replace")
+        return f"DeepSeek API HTTP {exc.code}: {body[:500]}"
+    if isinstance(exc, URLError):
+        reason = exc.reason
+        winerror = getattr(reason, "winerror", None)
+        if winerror == 10013 or "10013" in str(exc):
+            return (
+                "DeepSeek 网络连接被当前 Python 进程或系统权限阻止（WinError 10013）。"
+                "请用有出站网络权限的终端启动 dashboard_server.py，"
+                "或允许 Python 访问 https://api.deepseek.com。"
+            )
+        return f"DeepSeek 网络连接失败：{reason}"
+    return f"DeepSeek 调用失败：{exc}"
+
+
 def _list_of_strings(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item) for item in value if str(item)]
@@ -320,8 +338,11 @@ class DeepSeekRedTeamGenerator:
             },
             method="POST",
         )
-        with urlopen(req, timeout=90) as resp:
-            response = json.loads(resp.read().decode("utf-8"))
+        try:
+            with urlopen(req, timeout=90) as resp:
+                response = json.loads(resp.read().decode("utf-8"))
+        except (HTTPError, URLError, OSError) as exc:
+            raise RuntimeError(_deepseek_error_message(exc)) from exc
         content = response["choices"][0]["message"]["content"]
         return coerce_deepseek_attack(_extract_json_object(content), surface)
 
@@ -419,8 +440,11 @@ class DeepSeekDefenseAnalyzer:
             },
             method="POST",
         )
-        with urlopen(req, timeout=90) as resp:
-            response = json.loads(resp.read().decode("utf-8"))
+        try:
+            with urlopen(req, timeout=90) as resp:
+                response = json.loads(resp.read().decode("utf-8"))
+        except (HTTPError, URLError, OSError) as exc:
+            raise RuntimeError(_deepseek_error_message(exc)) from exc
         content = response["choices"][0]["message"]["content"]
         return coerce_defense_analysis(_extract_json_object(content), surface, generated)
 

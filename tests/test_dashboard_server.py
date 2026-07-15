@@ -1,5 +1,7 @@
 """Dashboard API helper tests."""
 
+from urllib.error import URLError
+
 from scripts.dashboard_server import (
     analyze_missed_detection,
     build_dashboard_summary,
@@ -15,7 +17,7 @@ from scripts.dashboard_server import (
     run_deepseek_redteam,
 )
 from src.redteam.attacks import EVAL_CASES
-from src.redteam.surface_lab import ATTACK_SURFACES, coerce_deepseek_attack, get_attack_surface
+from src.redteam.surface_lab import ATTACK_SURFACES, _deepseek_error_message, coerce_deepseek_attack, get_attack_surface
 
 
 def test_dashboard_summary_contains_metrics():
@@ -23,6 +25,14 @@ def test_dashboard_summary_contains_metrics():
     assert data["summary"]["total"] == len(EVAL_CASES)
     assert data["summary"]["detected"] >= 1
     assert data["cases"]
+
+
+def test_deepseek_permission_error_gets_actionable_message():
+    reason = OSError("socket forbidden")
+    reason.winerror = 10013
+    message = _deepseek_error_message(URLError(reason))
+    assert "WinError 10013" in message
+    assert "出站网络权限" in message
 
 
 def test_evaluate_case_serializes_decision():

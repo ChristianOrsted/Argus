@@ -1,6 +1,6 @@
 # Argus 项目总览与验收说明
 
-更新日期：2026-07-15
+更新日期：2026-07-16
 
 ## 1. 选题确认
 
@@ -275,6 +275,8 @@ http://127.0.0.1:8765
 
 如果已经在系统环境或 `.env` 中配置 `DEEPSEEK_API_KEY`，页面的 DeepSeek 区域可以不填 key。也可以在页面输入框中临时填入 key：该 key 只随本次本地请求发送到 `dashboard_server.py`，不会写入文件，也不会被前端保存。
 
+如果页面报 Windows `WinError 10013`，通常不是 API Key 错误，而是启动 `dashboard_server.py` 的 Python 进程没有出站网络权限。请从有网络权限的终端重新启动 Dashboard，或允许 Python 访问 `https://api.deepseek.com`。
+
 ### 5.7 可选：网页运行 DeepSeek 在线红队
 
 推荐验收操作：
@@ -395,6 +397,17 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - `.\.venv\Scripts\python scripts\run_benchmark.py`：通过，10/10 攻击检出，0 阻断型误报
 - Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
 - 自定义元数据烟测：`web_fetch https://example.com/data` 携带 `expected_guardian_action=block` 和风险点时返回 `BLOCK`
+
+2026-07-16 DeepSeek Dashboard 连通性和提示词同步修复后已重新验证：
+
+- `.\.venv\Scripts\python -m pytest`：54 passed
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `node --check dashboard\app.js`：通过
+- 受限默认执行环境复现 `WinError 10013`，并显示可操作中文诊断
+- 带出站网络权限的 DeepSeek smoke test：`model_jailbreak` 生成 `run_shell`，期望动作 `block`
+- Dashboard 固定端口已用带出站网络权限的进程重启
+- Dashboard 批量接口：`model_jailbreak` 一次生成 3 条，3 条均返回 `BLOCK`
+- Dashboard 批量接口 + DeepSeek intent judge：`tool_hijack` 生成 1 条，最终返回 `BLOCK`
 
 ## 7. 后续还能增强什么
 
