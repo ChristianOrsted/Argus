@@ -327,3 +327,22 @@ Validation:
 - Dashboard batch endpoint passed with the real API path: `model_jailbreak` generated 3 attacks and all 3 returned `block`.
 - Dashboard batch endpoint with DeepSeek intent judge passed: `tool_hijack` generated 1 attack, `intent_judge_enabled=True`, final action `block`.
 - API key was provided only through hidden runtime input and was not written to tracked files.
+
+## Stage 15 - Operation guide and topic-aligned self audit
+
+Commit message: `docs: add operation guide and self audit`
+
+Completed scope:
+
+- Add `docs/operation_guide.md` with Dashboard start, stop, port-change, port-check, and DeepSeek troubleshooting commands.
+- Clarify that the current frontend and backend share one Python Dashboard process on `127.0.0.1:8765`.
+- Document safe DeepSeek API key usage with runtime-only placeholders.
+- Add `WinError 10013` troubleshooting guidance for Python processes without outbound network permission.
+- Update README and project overview to link the new operation guide.
+- Expand `docs/project_self_audit.md` with topic-aligned follow-up work across attack coverage, behavior supervision engineering, evaluation datasets, and dashboard acceptance features.
+- Update `docs/update_log.md`.
+
+Validation:
+
+- Documentation-only change.
+- Secret scan passed: no real API key was written to tracked files.

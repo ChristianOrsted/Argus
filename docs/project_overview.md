@@ -144,6 +144,7 @@ Guardian 四层防御：
 路径：
 
 - `docs/architecture.md`
+- `docs/operation_guide.md`
 - `docs/project_overview.md`
 - `report/final_report.md`
 - `report/eval_results.md`
@@ -152,6 +153,7 @@ Guardian 四层防御：
 作用：
 
 - `architecture.md`：系统架构说明。
+- `operation_guide.md`：Dashboard 启停、端口释放、DeepSeek 在线演示和排障操作指导。
 - `project_overview.md`：总体性说明和验收指南。
 - `final_report.md`：课程报告草稿。
 - `eval_results.md`：自动生成的评测结果。
@@ -276,6 +278,8 @@ http://127.0.0.1:8765
 如果已经在系统环境或 `.env` 中配置 `DEEPSEEK_API_KEY`，页面的 DeepSeek 区域可以不填 key。也可以在页面输入框中临时填入 key：该 key 只随本次本地请求发送到 `dashboard_server.py`，不会写入文件，也不会被前端保存。
 
 如果页面报 Windows `WinError 10013`，通常不是 API Key 错误，而是启动 `dashboard_server.py` 的 Python 进程没有出站网络权限。请从有网络权限的终端重新启动 Dashboard，或允许 Python 访问 `https://api.deepseek.com`。
+
+更完整的端口启停、换端口和排障命令见 `docs/operation_guide.md`。
 
 ### 5.7 可选：网页运行 DeepSeek 在线红队
 

@@ -1,5 +1,21 @@
 # Argus Update Log
 
+## 2026-07-16 - Operation Guide And Topic-Aligned Self Audit
+
+本次新增文档：
+
+- 新增 `docs/operation_guide.md`，说明当前 Dashboard 是前端静态页面和后端 API 共用一个 Python 进程。
+- 补充 Dashboard 默认端口 `127.0.0.1:8765` 的启动、换端口、检查端口、关闭端口命令。
+- 补充 DeepSeek API Key 的临时使用方式，强调真实 key 不应写入脚本、文档或提交。
+- 补充 Windows `WinError 10013` 的排查路径：通常是启动 Dashboard 的 Python 进程没有出站网络权限。
+- 更新 `docs/project_self_audit.md`，按选题目标重新梳理后续深入方向：攻击面覆盖、行为监督机制工程化、对抗样本量化评测、前端演示和验收增强。
+- 更新 `README.md` 和 `docs/project_overview.md`，加入操作指导文档入口。
+
+本次验证结果：
+
+- 文档中未写入真实 API Key。
+- 文档命令使用占位符和本地默认端口，不改变代码运行逻辑。
+
 ## 2026-07-16 - DeepSeek Dashboard Connectivity And Prompt Sync Fix
 
 本次修复：
