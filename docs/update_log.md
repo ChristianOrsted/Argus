@@ -1,5 +1,23 @@
 # Argus Update Log
 
+## 2026-07-16 - Adversarial Dataset And Quantified Evaluation
+
+本次 C 方向优化：
+
+- 将离线评测种子集扩展到 29 条：21 条攻击样本、8 条良性对照。
+- 新增攻击类别覆盖：模型越狱、训练数据泄露扩展样本、工具调用劫持外联样本、记忆中毒外部 URL 链路、环境感知污染 shell 链路、序列异常样本。
+- 新增良性对照：低于异常阈值的重复读取、读取不可信源后写普通摘要等，用于观察告警和阻断的区别。
+- 同步更新 `datasets/seed_cases.jsonl`，并增加测试保证 jsonl 样本 ID 与 `src/redteam/attacks.py` 的 `EVAL_CASES` 一致。
+- 强化 `PolicyLayer` 对 PowerShell encoded command 的阻断，覆盖模型越狱变体。
+- 增强 `src/eval/benchmark.py`：新增按攻击面分类指标、四层 Verdict 分布、混淆矩阵、良性告警数、p50/p95 延时、逐样本层级动作。
+- `scripts/run_benchmark.py` 现在同时输出 `report/eval_results.md` 和 `report/eval_results.json`。
+
+本次验证结果：
+
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：29 条用例，21/21 攻击检出，0 阻断型误报，2 条良性告警。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：56 passed。
+
 ## 2026-07-16 - Four-Layer Explanation And Code Comments
 
 本次新增文档和注释：

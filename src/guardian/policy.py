@@ -30,6 +30,7 @@ DANGEROUS_PATTERNS = [
     (re.compile(r"\bwget\b.*\|\s*(ba)?sh\b"), "下载并直接执行（wget | sh）"),
     (re.compile(r"\b(nc|ncat|netcat)\b.*-e\b"), "反弹 shell"),
     (re.compile(r"/dev/tcp/"), "bash 反弹 shell"),
+    (re.compile(r"\b(powershell|pwsh)\b.*(-enc|-encodedcommand)\b", re.I), "PowerShell encoded command"),
     (re.compile(r"\b(mkfs|dd)\b.*of=/dev/"), "磁盘擦写"),
     (re.compile(r"\b(cat|type|Get-Content)\b.*(\.env|id_rsa|\.ssh|api[_-]?key|token|secret)", re.I), "读取敏感凭据"),
     (re.compile(r"\b(env|printenv|set)\b.*\b(API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b", re.I), "读取敏感环境变量"),

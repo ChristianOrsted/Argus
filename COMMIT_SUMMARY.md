@@ -365,3 +365,25 @@ Validation:
 - `.\.venv\Scripts\python -m pytest` passed.
 - `node --check dashboard\app.js` passed.
 - Secret scan passed: no real API key was written to tracked files.
+
+## Stage 17 - Adversarial dataset and quantified evaluation
+
+Commit message: `feat: expand adversarial evaluation metrics`
+
+Completed scope:
+
+- Expand the offline evaluation corpus to 29 cases: 21 attacks and 8 benign controls.
+- Add coverage for model jailbreak, expanded training-data leakage, tool-hijack exfiltration, memory-poisoning URL chains, environment-pollution shell chains, and sequence anomaly.
+- Add benign controls for non-blocking taint warnings and below-threshold repeated reads.
+- Sync `datasets/seed_cases.jsonl` with `src/redteam/attacks.py`.
+- Add tests to ensure seed jsonl IDs match Python `EVAL_CASES`.
+- Harden PolicyLayer against PowerShell encoded command jailbreak variants.
+- Extend benchmark output with category metrics, layer verdict distribution, confusion matrix, benign flag counts, p50/p95 latency, per-case layer actions, and JSON export.
+- Make `scripts/run_benchmark.py` write both `report/eval_results.md` and `report/eval_results.json`.
+
+Validation:
+
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 29 total cases, 21/21 attacks detected, 0 blocking false positives, 2 benign flags.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 56 tests passed.
+- Secret scan passed: no real API key was written to tracked files.

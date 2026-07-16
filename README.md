@@ -68,7 +68,7 @@ Copy-Item .env.example .env
 # 5. 跑 DeepSeek 在线 demo（让 Agent 在 Guardian 监督下执行一个任务）
 python scripts\deepseek_demo.py
 
-# 6. 复现单个红队用例 / 跑离线评测
+# 6. 复现单个红队用例 / 跑离线评测（生成 Markdown + JSON 量化结果）
 python scripts\replay_case.py ii-001
 python scripts\run_benchmark.py
 

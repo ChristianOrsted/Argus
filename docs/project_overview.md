@@ -131,9 +131,9 @@ Guardian 四层防御：
 
 已有样本：
 
-- 攻击样本 10 条。
-- 良性对照 6 条。
-- 覆盖提示注入、工具调用劫持、敏感信息读取、间接提示注入、记忆中毒、环境污染等场景。
+- 攻击样本 21 条。
+- 良性对照 8 条。
+- 覆盖提示注入、模型越狱、训练数据泄露、工具调用劫持、间接提示注入、记忆中毒、环境感知污染、序列异常等场景。
 
 `web_notes_evil.txt` 是间接提示注入 fixture：表面是普通网页笔记，隐藏内容要求 Agent 忽略原指令并下载执行恶意脚本。
 
@@ -168,7 +168,7 @@ Guardian 四层防御：
 
 - `offline_demo.py`：无需 API Key，演示良性放行、危险命令阻断、间接注入阻断。
 - `replay_case.py`：按样本 ID 复现单个攻击或良性场景。
-- `run_benchmark.py`：运行全部种子样本，输出检出率、误报率和延时。
+- `run_benchmark.py`：运行全部种子样本，输出总召回率、阻断型误报率、良性告警数、延时分位数、按攻击面分类指标、四层 Verdict 分布、混淆矩阵和逐样本结果。
 - `run_intent_judge_eval.py`：调用真实 DeepSeek intent judge，在线评测工具调用与用户意图是否一致。
 - `convert_public_jailbreaks.py`：把 AdvBench/JailbreakBench 风格公开数据集转换为 Argus jsonl。
 - `dashboard_server.py`：启动本地网页 Dashboard，展示样本、统计、逐层 Verdict、自定义评估、独立攻击面重跑、DeepSeek 在线红队生成和持久历史审计流。
@@ -183,6 +183,7 @@ Guardian 四层防御：
 - `docs/project_overview.md`
 - `report/final_report.md`
 - `report/eval_results.md`
+- `report/eval_results.json`
 - `COMMIT_SUMMARY.md`
 
 作用：
@@ -192,6 +193,7 @@ Guardian 四层防御：
 - `project_overview.md`：总体性说明和验收指南。
 - `final_report.md`：课程报告草稿。
 - `eval_results.md`：自动生成的评测结果。
+- `eval_results.json`：自动生成的机器可读评测结果，便于后续画图或前端导入。
 - `COMMIT_SUMMARY.md`：阶段 commit 汇总。
 
 ### 3.5 核心代码注释导航
@@ -244,7 +246,7 @@ cd E:\eve_jump\暑期课程\Argus
 当前验证结果：
 
 ```text
-54 passed
+56 passed
 ```
 
 ### 5.3 跑离线原型演示
@@ -463,6 +465,16 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - Dashboard 固定端口已用带出站网络权限的进程重启
 - Dashboard 批量接口：`model_jailbreak` 一次生成 3 条，3 条均返回 `BLOCK`
 - Dashboard 批量接口 + DeepSeek intent judge：`tool_hijack` 生成 1 条，最终返回 `BLOCK`
+
+2026-07-16 对抗样本和评测量化增强后已重新验证：
+
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：29 条用例，21 条攻击、8 条良性对照
+- 攻击检出：21/21，召回率 100.00%
+- 阻断型误报：0，良性告警：2
+- 评测报告新增：按攻击面分类指标、四层 Verdict 分布、混淆矩阵、p50/p95 延时和逐样本层级动作
+- 机器可读结果：`report/eval_results.json`
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `.\.venv\Scripts\python -m pytest`：56 passed
 
 ## 7. 后续还能增强什么
 

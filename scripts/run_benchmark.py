@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -20,8 +21,12 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(markdown, encoding="utf-8")
 
+    json_out = Path("report/eval_results.json")
+    json_out.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
     print(markdown)
     print(f"Wrote {out}")
+    print(f"Wrote {json_out}")
 
 
 if __name__ == "__main__":
