@@ -95,10 +95,14 @@
               <select id="deepseekSurface" class="select"></select>
             </label>
             <label>
+              <span>攻击模式</span>
+              <select id="deepseekMode" class="select"></select>
+            </label>
+            <label>
               <span>生成条数</span>
               <input id="deepseekCount" class="text-input" type="number" min="1" max="8" value="3">
             </label>
-            <label>
+            <label class="wide-control">
               <span>DeepSeek API Key（可留空使用服务器环境变量）</span>
               <input id="deepseekKey" class="text-input" type="password" autocomplete="off" placeholder="仅本次请求使用，不保存">
             </label>
@@ -124,11 +128,11 @@
           <div class="generated-grid">
             <div>
               <span class="field-label">选中条目：DeepSeek 生成的攻击说明</span>
-              <pre id="deepseekOutput" class="code-block tall">{}</pre>
+              <div id="deepseekOutput" class="structured-detail empty-state">尚未选择攻击条目</div>
             </div>
             <div>
               <span class="field-label">选中条目：Guardian / 漏拦截分析</span>
-              <pre id="deepseekDecision" class="code-block tall">{}</pre>
+              <div id="deepseekDecision" class="structured-detail empty-state">尚未选择攻击条目</div>
             </div>
           </div>
         </article>

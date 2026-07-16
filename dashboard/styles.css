@@ -496,7 +496,7 @@ textarea,
 .deepseek-controls {
   margin-top: 14px;
   display: grid;
-  grid-template-columns: 1fr 120px;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, .7fr) 120px;
   gap: 12px;
 }
 
@@ -505,7 +505,7 @@ textarea,
 }
 
 .compact-textarea {
-  min-height: 74px;
+  min-height: 150px;
 }
 
 .toggle-row {
@@ -523,7 +523,7 @@ textarea,
 .generated-grid {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: 14px;
 }
 
@@ -614,6 +614,118 @@ textarea,
   max-height: 330px;
 }
 
+.structured-detail {
+  min-height: 300px;
+  max-height: 560px;
+  overflow: auto;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+}
+
+.structured-detail.empty-state {
+  display: block;
+}
+
+.detail-block {
+  border: 1px solid var(--line);
+  background: #111821;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.detail-block.missed {
+  border-color: rgba(255, 107, 107, .72);
+  background: #21151a;
+}
+
+.detail-block h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.detail-block p {
+  margin: 0;
+  color: #cbd7e6;
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.detail-heading,
+.analysis-actions,
+.inline-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.detail-heading {
+  justify-content: space-between;
+}
+
+.detail-two-col,
+.layer-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.layer-detail-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detail-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #cbd7e6;
+  line-height: 1.45;
+  font-size: 13px;
+}
+
+.tool-summary {
+  display: grid;
+  gap: 8px;
+}
+
+.mini-code {
+  margin: 0;
+  max-height: 170px;
+  overflow: auto;
+  background: #0b1017;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  color: #dbe7f5;
+  white-space: pre-wrap;
+  font-size: 12px;
+}
+
+.json-details {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0f151d;
+  padding: 10px;
+}
+
+.json-details summary {
+  cursor: pointer;
+  color: #cbd7e6;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.json-details .mini-code {
+  margin-top: 10px;
+}
+
+.muted-text {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .form-grid {
   margin-top: 16px;
   display: grid;
@@ -689,6 +801,9 @@ textarea {
   .surface-grid,
   .analysis-grid,
   .detail-grid,
+  .generated-grid,
+  .detail-two-col,
+  .layer-detail-grid,
   .deepseek-controls,
   .verdict-strip,
   .form-grid {

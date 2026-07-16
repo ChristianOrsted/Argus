@@ -387,3 +387,28 @@ Validation:
 - `.\.venv\Scripts\python -m compileall src scripts tests` passed.
 - `.\.venv\Scripts\python -m pytest` passed: 56 tests passed.
 - Secret scan passed: no real API key was written to tracked files.
+
+## Stage 18 - DeepSeek red-team UX and prompt modes
+
+Commit message: `feat: improve deepseek redteam workflow`
+
+Completed scope:
+
+- Add four explicit DeepSeek red-team prompt modes per attack surface: direct, stealth, chain, and bypass.
+- Return `prompt_modes` through the Dashboard summary API so the frontend can display and edit full prompt templates.
+- Propagate `attack_mode` through DeepSeek batch results, Guardian metadata, and history payloads.
+- Replace raw JSON DeepSeek output panels with structured attack and Guardian detail views.
+- Add an in-detail “调用 DeepSeek 分析并优化规则” action for non-blocked red-team samples.
+- Keep raw JSON available behind expandable details for debugging without making it the main display.
+- Update project overview and update log.
+- Add tests for prompt modes and `attack_mode` propagation.
+
+Validation:
+
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 57 tests passed.
+- `git diff --check` passed.
+- Dashboard foreground smoke test passed: `GET /` returned `200`.
+- Dashboard summary API returned 29 cases, 7 attack surfaces, and 4 DeepSeek prompt modes per surface.
+- Secret scan passed: no real API key was written to tracked files.

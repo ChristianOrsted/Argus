@@ -1,5 +1,28 @@
 # Argus Update Log
 
+## 2026-07-16 - DeepSeek Red Team UX And Prompt Modes
+
+本次新增功能：
+
+- DeepSeek 在线红队从单一固定提示词升级为 4 种攻击模式：精准单步、伪装正常任务、多步攻击链、绕过变体。
+- 每个攻击面现在通过 `/api/summary` 返回 `prompt_modes`，前端可按模式显式展示和编辑完整提示词。
+- 批量生成接口新增 `attack_mode` 元数据，审计历史和 Guardian context 能记录该条攻击来自哪种生成模式。
+- DeepSeek 批量条目的详情展示从原始 JSON 代码块改为结构化说明，拆分展示攻击目标、用户请求、工具调用、污点来源、风险点和危险解释。
+- Guardian / 漏拦截分析区改为结构化展示总状态、四层 Verdict、漏拦截状态、DeepSeek 分析结果和自适应规则写入结果。
+- 未被 `BLOCK` 的 DeepSeek 红队条目可在详情区直接点击“调用 DeepSeek 分析并优化规则”，形成红队生成、Guardian 审计、漏拦截复盘、规则同步、重评估的闭环。
+- 更新 `docs/project_overview.md`，说明 DeepSeek 在线红队的四类模式和前端漏拦截闭环。
+- 新增测试覆盖攻击面提示词模式和 `attack_mode` 透传。
+
+本次验证结果：
+
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：57 passed。
+- 补丁检查通过：`git diff --check`。
+- Dashboard 前台 smoke test 通过：`GET http://127.0.0.1:8765/` 返回 `200`。
+- Dashboard 摘要接口通过：29 个样本、7 个攻击面、每个攻击面 4 个 DeepSeek 提示词模式。
+- 无 API Key 时在线 DeepSeek 接口按预期拒绝真实调用，不会把密钥写入项目文件。
+
 ## 2026-07-16 - Adversarial Dataset And Quantified Evaluation
 
 本次 C 方向优化：

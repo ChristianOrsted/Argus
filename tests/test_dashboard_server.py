@@ -17,7 +17,13 @@ from scripts.dashboard_server import (
     run_deepseek_redteam,
 )
 from src.redteam.attacks import EVAL_CASES
-from src.redteam.surface_lab import ATTACK_SURFACES, _deepseek_error_message, coerce_deepseek_attack, get_attack_surface
+from src.redteam.surface_lab import (
+    ATTACK_SURFACES,
+    _deepseek_error_message,
+    coerce_deepseek_attack,
+    get_attack_surface,
+    serialize_surface,
+)
 
 
 def test_dashboard_summary_contains_metrics():
@@ -33,6 +39,14 @@ def test_deepseek_permission_error_gets_actionable_message():
     message = _deepseek_error_message(URLError(reason))
     assert "WinError 10013" in message
     assert "出站网络权限" in message
+
+
+def test_attack_surface_summary_exposes_prompt_modes():
+    surface = serialize_surface(get_attack_surface("tool_hijack"))
+    modes = surface["prompt_modes"]
+    assert {mode["id"] for mode in modes} >= {"direct", "stealth", "chain", "bypass"}
+    assert "攻击模式" in modes[1]["prompt"]
+    assert len(modes[1]["prompt"].splitlines()) > 6
 
 
 def test_evaluate_case_serializes_decision():
@@ -132,8 +146,11 @@ def test_deepseek_redteam_path_accepts_fake_generator():
 
 
 def test_deepseek_batch_path_accepts_fake_generator():
+    seen_prompts = []
+
     class FakeGenerator:
         def generate_many(self, surface, count=1, prompt_override=""):
+            seen_prompts.append(prompt_override)
             return [
                 {
                     "attack_surface": surface.id,
@@ -148,9 +165,15 @@ def test_deepseek_batch_path_accepts_fake_generator():
                 for idx in range(count)
             ]
 
-    result = run_deepseek_batch({"surface_id": "tool_hijack", "count": 3}, generator=FakeGenerator())
+    result = run_deepseek_batch(
+        {"surface_id": "tool_hijack", "count": 3, "attack_mode": "stealth"},
+        generator=FakeGenerator(),
+    )
+    assert "伪装正常任务" in seen_prompts[0]
+    assert result["attack_mode"] == "stealth"
     assert result["count"] == 3
     assert result["actions"]["block"] == 3
+    assert result["results"][0]["context"]["metadata"]["attack_mode"] == "stealth"
 
 
 def test_deepseek_generated_tool_hijack_metadata_blocks_benign_fetch_shape():

@@ -265,6 +265,7 @@ function renderSurfaceLab() {
     `<option value="${escapeHtml(surface.id)}">${escapeHtml(surface.title)}</option>`
   )).join("");
   select.value = surfaces.some((surface) => surface.id === current) ? current : ((surfaces[0] && surfaces[0].id) || "");
+  syncModeOptions();
   syncPromptText();
 }
 
@@ -273,16 +274,37 @@ function currentDeepSeekSurface() {
   return surface || null;
 }
 
+function currentDeepSeekMode() {
+  const surface = currentDeepSeekSurface();
+  const modes = (surface && surface.prompt_modes) || [];
+  const selected = el("deepseekMode").value;
+  return modes.find((mode) => mode.id === selected) || modes[0] || null;
+}
+
+function syncModeOptions(force = false) {
+  const surface = currentDeepSeekSurface();
+  const modes = (surface && surface.prompt_modes) || [];
+  const select = el("deepseekMode");
+  const current = force ? "" : select.value;
+  select.innerHTML = modes.map((mode) => (
+    `<option value="${escapeHtml(mode.id)}">${escapeHtml(mode.title)}</option>`
+  )).join("");
+  select.disabled = modes.length === 0;
+  select.value = modes.some((mode) => mode.id === current) ? current : ((modes[0] && modes[0].id) || "");
+}
+
 function syncPromptText(force = false) {
   const surface = currentDeepSeekSurface();
-  const prompt = surface ? surface.prompt : "";
+  const mode = currentDeepSeekMode();
+  const prompt = mode ? mode.prompt : (surface ? surface.prompt : "");
   const textarea = el("deepseekPrompt");
   textarea.placeholder = prompt || "留空则使用默认红队提示词";
-  const surfaceChanged = surface && state.promptSurfaceId !== surface.id;
-  if (force || !state.promptDirty || surfaceChanged || !textarea.value.trim()) {
+  const promptKey = surface ? `${surface.id}:${mode ? mode.id : "default"}` : null;
+  const promptTemplateChanged = promptKey && state.promptSurfaceId !== promptKey;
+  if (force || !state.promptDirty || promptTemplateChanged || !textarea.value.trim()) {
     textarea.value = prompt;
     state.promptDirty = false;
-    state.promptSurfaceId = surface ? surface.id : null;
+    state.promptSurfaceId = promptKey;
   }
 }
 
@@ -292,9 +314,143 @@ function shortTool(result) {
   return `${call.name || "tool"} ${input.url || input.path || input.command || input.cmd || ""}`.trim();
 }
 
+function tagList(items, fallback = "未提供") {
+  const values = Array.isArray(items) ? items.filter((item) => String(item || "").trim()) : [];
+  if (!values.length) {
+    return `<span class="tag">${escapeHtml(fallback)}</span>`;
+  }
+  return values.map((item) => `<span class="tag">${escapeHtml(item)}</span>`).join("");
+}
+
+function bulletList(items, fallback = "未提供") {
+  const values = Array.isArray(items) ? items.filter((item) => String(item || "").trim()) : [];
+  if (!values.length) {
+    return `<p class="muted-text">${escapeHtml(fallback)}</p>`;
+  }
+  return `<ul class="detail-list">${values.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+}
+
+function jsonDetails(title, value) {
+  return `
+    <details class="json-details">
+      <summary>${escapeHtml(title)}</summary>
+      <pre class="mini-code">${escapeHtml(prettyJson(value || {}))}</pre>
+    </details>
+  `;
+}
+
+function renderToolDetail(toolCall) {
+  const call = toolCall || {};
+  return `
+    <div class="tool-summary">
+      <span class="tag attack">${escapeHtml(call.name || "unknown_tool")}</span>
+      <pre class="mini-code">${escapeHtml(prettyJson(call.input || {}))}</pre>
+    </div>
+  `;
+}
+
+function renderRedteamDetail(result) {
+  const redteam = result.redteam || {};
+  const caseData = result.case || {};
+  const toolCall = redteam.tool_call || caseData.tool_call || {};
+  const node = el("deepseekOutput");
+  node.className = "structured-detail";
+  node.innerHTML = `
+    <div class="detail-block">
+      <div class="detail-heading">
+        <span class="tag attack">${escapeHtml(redteam.attack_surface || (result.surface || {}).id || caseData.category || "deepseek")}</span>
+        <span class="decision-pill ${actionClass(expectedAction(result) || "block")}">${escapeHtml(expectedAction(result) || "expected")}</span>
+      </div>
+      <h4>${escapeHtml(redteam.attack_goal || caseData.description || "DeepSeek 生成的红队样本")}</h4>
+      <p>${escapeHtml(redteam.danger_explanation || "模型未返回 danger_explanation，可查看原始 JSON。")}</p>
+    </div>
+    <div class="detail-block">
+      <h4>用户请求</h4>
+      <p>${escapeHtml(redteam.user_request || caseData.user_request || "未提供")}</p>
+    </div>
+    <div class="detail-block">
+      <h4>工具调用</h4>
+      ${renderToolDetail(toolCall)}
+    </div>
+    <div class="detail-two-col">
+      <div class="detail-block">
+        <h4>污点来源</h4>
+        <div class="inline-tags">${tagList(redteam.tainted_sources || caseData.tainted_sources)}</div>
+      </div>
+      <div class="detail-block">
+        <h4>风险点</h4>
+        ${bulletList(redteam.risk_points)}
+      </div>
+    </div>
+    ${jsonDetails("查看 DeepSeek 原始 JSON", redteam)}
+  `;
+}
+
+function renderGuardianDetail(result, analysisPayload, index) {
+  const decision = result.decision || {};
+  const verdicts = decision.verdicts || [];
+  const analysis = (analysisPayload || {}).analysis || null;
+  const appliedRules = (analysisPayload || {}).applied_rules || [];
+  const recheck = (analysisPayload || {}).recheck_result || null;
+  const missed = isMissed(result);
+  const canAnalyze = decision.action !== "block";
+  const node = el("deepseekDecision");
+  node.className = "structured-detail";
+  node.innerHTML = `
+    <div class="detail-block ${missed ? "missed" : ""}">
+      <div class="detail-heading">
+        <span class="decision-pill ${actionClass(displayAction(result))}">总状态 ${actionLabel(displayAction(result))}</span>
+        <span class="tag">${escapeHtml(expectedAction(result) ? `期望 ${expectedAction(result).toUpperCase()}` : "无期望动作")}</span>
+      </div>
+      <h4>${escapeHtml(missed ? "发现漏拦截候选" : (decision.action === "block" ? "Guardian 已阻断" : "Guardian 未阻断"))}</h4>
+      <p>${escapeHtml(decision.reason || "all checks passed")}</p>
+      <div class="analysis-actions">
+        ${canAnalyze ? `<button class="primary-button" data-analyze-selected="${index}">调用 DeepSeek 分析并优化规则</button>` : `<span class="tag benign">当前条目已阻断</span>`}
+      </div>
+    </div>
+    <div class="layer-detail-grid">
+      ${LAYER_ORDER.map((layer) => {
+        const verdict = verdicts.find((item) => item.layer === layer) || { layer, action: "neutral", reason: "未返回该层判定", confidence: 0 };
+        return `
+          <div class="detail-block layer-detail">
+            <div class="detail-heading">
+              <h4>${escapeHtml(layer)}</h4>
+              <span class="decision-pill ${actionClass(verdict.action)}">${actionLabel(verdict.action)}</span>
+            </div>
+            <p>${escapeHtml(verdict.reason || "all checks passed")}</p>
+            <small>confidence ${escapeHtml(Number(verdict.confidence || 0).toFixed(2))}</small>
+          </div>
+        `;
+      }).join("")}
+    </div>
+    ${analysis ? `
+      <div class="detail-block analysis-block">
+        <h4>DeepSeek 漏拦截分析</h4>
+        <p><strong>原因：</strong>${escapeHtml(analysis.missed_reason || "未提供")}</p>
+        <p><strong>建议：</strong>${escapeHtml(analysis.recommended_patch || "未提供")}</p>
+        <div class="inline-tags">${tagList(appliedRules.map((rule) => rule.description || rule.id || "adaptive_rule"), "未写入规则")}</div>
+        ${recheck ? `<p class="muted-text">重评估结果：${escapeHtml((recheck.decision || {}).action || "unknown")}</p>` : ""}
+      </div>
+      ${jsonDetails("查看自适应规则 JSON", analysis)}
+    ` : ""}
+    ${jsonDetails("查看 Guardian 原始 JSON", {
+      expected_guardian_action: expectedAction(result) || null,
+      missed_detection: missed,
+      displayed_total_action: displayAction(result),
+      action: decision.action,
+      reason: decision.reason,
+      verdicts,
+      latency_ms: result.latency_ms,
+    })}
+  `;
+  node.querySelectorAll("[data-analyze-selected]").forEach((button) => {
+    button.addEventListener("click", () => analyzeMiss(Number(button.dataset.analyzeSelected)));
+  });
+}
+
 function renderBatchMatrix() {
   // 批量矩阵是演示核心：左侧是攻击条目信息，右侧依次是总状态和四层状态。
-  // 点击行会把该条 DeepSeek 原始 JSON 与 Guardian Verdict 展开到详情区。
+  // 点击行会把 DeepSeek 攻击说明、Guardian Verdict 和漏拦截闭环展开到结构化详情区。
   const matrix = el("batchMatrix");
   if (!state.batchResults.length) {
     matrix.innerHTML = `<div class="empty-state">尚未生成批量攻击条目</div>`;
@@ -344,17 +500,8 @@ function selectBatchItem(index) {
   renderBatchMatrix();
   renderDecision(result);
   const analysis = state.batchAnalyses[index];
-  el("deepseekOutput").textContent = prettyJson(result.redteam || {});
-  el("deepseekDecision").textContent = prettyJson({
-    expected_guardian_action: expectedAction(result) || null,
-    missed_detection: isMissed(result),
-    displayed_total_action: displayAction(result),
-    action: result.decision.action,
-    reason: result.decision.reason,
-    verdicts: result.decision.verdicts,
-    latency_ms: result.latency_ms,
-    analysis: analysis || null,
-  });
+  renderRedteamDetail(result);
+  renderGuardianDetail(result, analysis, index);
 }
 
 function renderDecision(result) {
@@ -414,9 +561,12 @@ async function runDeepSeekRedTeam(surfaceId) {
   const selectedSurface = surfaceId || el("deepseekSurface").value;
   el("deepseekSurface").value = selectedSurface;
   if (surfaceId) {
+    syncModeOptions(true);
     syncPromptText(true);
   }
+  el("deepseekOutput").className = "structured-detail empty-state";
   el("deepseekOutput").textContent = "DeepSeek 正在批量生成红队样本...";
+  el("deepseekDecision").className = "structured-detail empty-state";
   el("deepseekDecision").textContent = "等待 Guardian 批量审计...";
   el("deepseekRunBtn").disabled = true;
   try {
@@ -424,6 +574,7 @@ async function runDeepSeekRedTeam(surfaceId) {
       method: "POST",
       body: JSON.stringify({
         surface_id: selectedSurface,
+        attack_mode: el("deepseekMode").value,
         api_key: el("deepseekKey").value,
         use_intent_judge: el("deepseekIntent").checked,
         count: Number(el("deepseekCount").value || 1),
@@ -439,7 +590,13 @@ async function runDeepSeekRedTeam(surfaceId) {
     }
     await loadHistory();
   } catch (err) {
-    el("deepseekDecision").textContent = err.message;
+    el("deepseekDecision").className = "structured-detail";
+    el("deepseekDecision").innerHTML = `
+      <div class="detail-block missed">
+        <h4>DeepSeek 红队调用失败</h4>
+        <p>${escapeHtml(err.message)}</p>
+      </div>
+    `;
     addAudit("deepseek", "block", "DeepSeek 红队调用失败", err.message);
   } finally {
     el("deepseekRunBtn").disabled = false;
@@ -452,6 +609,7 @@ async function analyzeMiss(index) {
   if (!result) {
     return;
   }
+  el("deepseekDecision").className = "structured-detail empty-state";
   el("deepseekDecision").textContent = "DeepSeek 正在分析漏拦截原因并生成受限防御规则...";
   try {
     const analysis = await api("/api/analyze-miss", {
@@ -562,10 +720,16 @@ function bindEvents() {
   el("runAllBtn").addEventListener("click", runAll);
   el("customRunBtn").addEventListener("click", evaluateCustom);
   el("deepseekRunBtn").addEventListener("click", () => runDeepSeekRedTeam());
-  el("deepseekSurface").addEventListener("change", () => syncPromptText(true));
+  el("deepseekSurface").addEventListener("change", () => {
+    syncModeOptions(true);
+    syncPromptText(true);
+  });
+  el("deepseekMode").addEventListener("change", () => syncPromptText(true));
   el("deepseekPrompt").addEventListener("input", () => {
     state.promptDirty = true;
-    state.promptSurfaceId = el("deepseekSurface").value;
+    const surface = el("deepseekSurface").value;
+    const mode = el("deepseekMode").value || "default";
+    state.promptSurfaceId = `${surface}:${mode}`;
   });
   el("clearAuditBtn").addEventListener("click", () => {
     state.audit = [];
