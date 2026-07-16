@@ -160,8 +160,22 @@ https://api.deepseek.com
 7. 输入临时 DeepSeek API Key。
 8. 点击“运行 DeepSeek 红队”。
 9. 查看批量矩阵中的“总 / 1 / 2 / 3 / 4”状态。
-10. 点击某个条目查看 DeepSeek 原始攻击 JSON 和 Guardian 审计细节。
+10. 点击某个条目打开攻击详情弹窗，查看攻击链路图、攻击点和 Guardian 审计细节。
 11. 如果出现漏拦截，点击“分析漏拦截”，观察自适应规则和重评估结果。
+12. 打开“规则管理”，查看自适应规则的来源、命中次数、启停状态，必要时停用或撤销规则。
+13. 打开“演示验收”，点击“运行 7 攻击面验收”，生成 Markdown 验收记录、JSON 结果和 SVG 截图快照。
+
+一键演示产物默认写入：
+
+```text
+sandbox_runs/demo_acceptance/
+```
+
+页面会提供三个链接：
+
+- 验收记录：`argus_demo_*.md`
+- 机器可读结果：`argus_demo_*.json`
+- 截图快照：`argus_demo_*.svg`
 
 ## 8. 常用验收命令
 
@@ -177,4 +191,6 @@ node --check dashboard\app.js
 ```powershell
 (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8765/).StatusCode
 (Invoke-RestMethod http://127.0.0.1:8765/api/summary).summary.detected
+(Invoke-RestMethod http://127.0.0.1:8765/api/adaptive-rules).summary
+(Invoke-RestMethod http://127.0.0.1:8765/api/demo-run -Method Post -ContentType 'application/json' -Body '{}').detected
 ```

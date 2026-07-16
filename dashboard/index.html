@@ -23,6 +23,8 @@
         <a href="#cases" class="nav-item">红队样本</a>
         <a href="#custom" class="nav-item">自定义评估</a>
         <a href="#layers" class="nav-item">防御层</a>
+        <a href="#rules" class="nav-item">规则管理</a>
+        <a href="#demo" class="nav-item">演示验收</a>
         <a href="#audit" class="nav-item">审计流</a>
       </nav>
 
@@ -141,6 +143,7 @@
                 <button id="modalCloseBtn" class="ghost-button">关闭</button>
               </div>
               <div id="modalStatusRow" class="modal-status-row"></div>
+              <div id="modalChain" class="chain-view"></div>
               <div class="modal-grid">
                 <div>
                   <span class="field-label">攻击点</span>
@@ -215,6 +218,30 @@
           </div>
           <div id="coverageGrid" class="coverage-grid"></div>
         </article>
+      </section>
+
+      <section id="rules" class="panel rules-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Adaptive Rules</p>
+            <h3>自适应规则管理</h3>
+            <small id="rulesSummary" class="scope-note">规则加载中</small>
+          </div>
+          <button id="rulesRefreshBtn" class="ghost-button">刷新规则</button>
+        </div>
+        <div id="rulesList" class="rules-list"></div>
+      </section>
+
+      <section id="demo" class="panel demo-panel">
+        <div class="panel-head">
+          <div>
+            <p class="eyebrow">Acceptance Demo</p>
+            <h3>一键演示脚本模式</h3>
+            <small class="scope-note">固定运行 7 个攻击面，生成验收记录和截图快照</small>
+          </div>
+          <button id="demoRunBtn" class="primary-button">运行 7 攻击面验收</button>
+        </div>
+        <div id="demoResult" class="demo-result empty-state">尚未运行演示验收</div>
       </section>
 
       <section id="custom" class="panel custom-panel">

@@ -1,5 +1,6 @@
 """Dashboard API helper tests."""
 
+from pathlib import Path
 from urllib.error import URLError
 
 from scripts.dashboard_server import (
@@ -13,6 +14,7 @@ from scripts.dashboard_server import (
     normalize_tainted_sources,
     record_history,
     resolve_static_path,
+    run_demo_acceptance,
     run_deepseek_batch,
     run_deepseek_redteam,
 )
@@ -234,3 +236,14 @@ def test_history_store_records_and_summarizes_events(tmp_path):
     assert history["summary"]["actions"]["block"] == 1
     assert history["entries"][0]["surface_id"] == "memory_poison"
     assert "policy" in history["summary"]["layers"]
+
+
+def test_demo_acceptance_generates_artifacts(tmp_path):
+    result = run_demo_acceptance(output_dir=tmp_path)
+    assert result["total"] == len(ATTACK_SURFACES)
+    assert result["detected"] == len(ATTACK_SURFACES)
+    artifacts = result["artifacts"]
+    assert Path(artifacts["json"]).is_file()
+    assert Path(artifacts["markdown"]).is_file()
+    assert Path(artifacts["screenshot"]).is_file()
+    assert artifacts["screenshot_url"].endswith(".svg")

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import html
 import json
 import mimetypes
 import sqlite3
@@ -27,7 +28,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.config import AGENT_MODEL, DEEPSEEK_API_KEY
 from src.eval.benchmark import evaluate_guardian
-from src.guardian.adaptive_rules import append_adaptive_rules, load_adaptive_rules
+from src.guardian.adaptive_rules import (
+    append_adaptive_rules,
+    delete_adaptive_rule,
+    load_adaptive_rules,
+    set_rule_enabled,
+)
 from src.guardian import Context, DeepSeekIntentJudge, ToolCall, build_default_guardian
 from src.redteam.attacks import EVAL_CASES, AttackCase
 from src.redteam.surface_lab import (
@@ -44,6 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "dashboard"
 STATIC_ROOT = DASHBOARD_DIR.resolve()
 HISTORY_DB = ROOT / "sandbox_runs" / "audit" / "dashboard_history.sqlite3"
+DEMO_DIR = ROOT / "sandbox_runs" / "demo_acceptance"
 
 
 def _case_context(case: AttackCase, metadata: dict | None = None) -> Context:
@@ -237,6 +244,20 @@ def load_history(limit: int = 100, db_path: Path = HISTORY_DB) -> dict:
     }
 
 
+def list_adaptive_rules() -> dict:
+    """返回前端规则管理页需要的规则状态。"""
+    rules = load_adaptive_rules()
+    return {
+        "rules": rules,
+        "summary": {
+            "total": len(rules),
+            "enabled": sum(1 for rule in rules if rule.get("enabled", True)),
+            "disabled": sum(1 for rule in rules if not rule.get("enabled", True)),
+            "hits": sum(int(rule.get("hit_count") or 0) for rule in rules),
+        },
+    }
+
+
 def clear_history(db_path: Path = HISTORY_DB) -> None:
     with _history_connect(db_path) as conn:
         conn.execute("DELETE FROM dashboard_events")
@@ -291,6 +312,137 @@ def evaluate_surface(surface_id: str) -> dict:
         "mode": "offline",
         "surface": serialize_surface(surface),
         **result,
+    }
+
+
+def _action_counts(results: list[dict]) -> dict:
+    actions = {"allow": 0, "flag": 0, "block": 0}
+    for result in results:
+        action = (result.get("decision") or {}).get("action")
+        if action in actions:
+            actions[action] += 1
+    return actions
+
+
+def _layer_counts(results: list[dict]) -> dict:
+    layers: dict[str, dict[str, int]] = {}
+    for result in results:
+        for verdict in (result.get("decision") or {}).get("verdicts") or []:
+            layer = verdict.get("layer") or "unknown"
+            action = verdict.get("action") or "allow"
+            layers.setdefault(layer, {"allow": 0, "flag": 0, "block": 0})
+            if action in layers[layer]:
+                layers[layer][action] += 1
+    return layers
+
+
+def _layer_action(result: dict, layer: str) -> str:
+    for verdict in (result.get("decision") or {}).get("verdicts") or []:
+        if verdict.get("layer") == layer:
+            return verdict.get("action") or "allow"
+    return "allow"
+
+
+def _write_demo_svg(results: list[dict], out_path: Path, generated_at: str) -> None:
+    """生成一张无需浏览器依赖的验收截图快照（SVG）。"""
+    colors = {"allow": "#53d86a", "flag": "#f0b84a", "block": "#ff6b6b"}
+    width = 1280
+    row_h = 72
+    height = 170 + row_h * len(results)
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#0d1117"/>',
+        '<text x="42" y="58" fill="#edf3fb" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="30" font-weight="700">Argus Guardian 7-Attack-Surface Acceptance Snapshot</text>',
+        f'<text x="42" y="92" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">Generated: {html.escape(generated_at)} · total {len(results)} · detected {sum(1 for item in results if (item.get("decision") or {}).get("action") in {"flag", "block"})}/{len(results)}</text>',
+        '<text x="570" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">总</text>',
+        '<text x="650" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">1 policy</text>',
+        '<text x="760" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">2 taint</text>',
+        '<text x="870" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">3 intent</text>',
+        '<text x="980" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">4 anomaly</text>',
+    ]
+    for idx, result in enumerate(results):
+        y = 160 + idx * row_h
+        surface = result.get("surface") or {}
+        case = result.get("case") or {}
+        decision = result.get("decision") or {}
+        action = decision.get("action") or "allow"
+        parts.extend([
+            f'<rect x="36" y="{y - 28}" width="1208" height="58" rx="8" fill="#151b23" stroke="#2d3644"/>',
+            f'<text x="58" y="{y - 4}" fill="#edf3fb" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700">{idx + 1}. {html.escape(surface.get("title") or surface.get("id") or "")}</text>',
+            f'<text x="58" y="{y + 20}" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13">{html.escape(case.get("tool_call", {}).get("name") or "tool")} · {html.escape(decision.get("reason") or "")[:90]}</text>',
+        ])
+        x_positions = [585, 682, 790, 908, 1030]
+        actions = [action] + [_layer_action(result, layer) for layer in ("policy", "taint", "intent", "anomaly")]
+        for x, item_action in zip(x_positions, actions):
+            color = colors.get(item_action, "#3a4555")
+            parts.append(f'<circle cx="{x}" cy="{y}" r="13" fill="{color}" opacity="0.95"/>')
+    parts.append("</svg>")
+    out_path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def _write_demo_markdown(results: list[dict], out_path: Path, generated_at: str, screenshot_name: str) -> None:
+    rows = [
+        "# Argus Demo Acceptance Record",
+        "",
+        f"- Generated: `{generated_at}`",
+        f"- Scope: fixed 7 attack surfaces",
+        f"- Detected: `{sum(1 for item in results if (item.get('decision') or {}).get('action') in {'flag', 'block'})}/{len(results)}`",
+        f"- Screenshot: `{screenshot_name}`",
+        "",
+        "| # | attack surface | tool | decision | layer actions | reason |",
+        "|---:|---|---|---|---|---|",
+    ]
+    for idx, result in enumerate(results, 1):
+        surface = result.get("surface") or {}
+        case = result.get("case") or {}
+        decision = result.get("decision") or {}
+        layers = ", ".join(
+            f"{verdict.get('layer')}={verdict.get('action')}"
+            for verdict in decision.get("verdicts") or []
+        )
+        rows.append(
+            "| {idx} | {surface} | {tool} | {action} | {layers} | {reason} |".format(
+                idx=idx,
+                surface=str(surface.get("title") or surface.get("id") or "").replace("|", "/"),
+                tool=str((case.get("tool_call") or {}).get("name") or "").replace("|", "/"),
+                action=str(decision.get("action") or "").replace("|", "/"),
+                layers=layers.replace("|", "/"),
+                reason=str(decision.get("reason") or "").replace("|", "/"),
+            )
+        )
+    out_path.write_text("\n".join(rows), encoding="utf-8")
+
+
+def run_demo_acceptance(output_dir: Path = DEMO_DIR) -> dict:
+    """一键运行固定 7 个攻击面，并生成验收记录和截图快照。"""
+    generated_at = dt.datetime.now(dt.timezone.utc).isoformat()
+    results = [evaluate_surface(surface.id) for surface in ATTACK_SURFACES]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = output_dir / f"argus_demo_{stamp}.json"
+    md_path = output_dir / f"argus_demo_{stamp}.md"
+    svg_path = output_dir / f"argus_demo_{stamp}.svg"
+    payload = {
+        "generated_at": generated_at,
+        "total": len(results),
+        "detected": sum(1 for item in results if (item.get("decision") or {}).get("action") in {"flag", "block"}),
+        "actions": _action_counts(results),
+        "layers": _layer_counts(results),
+        "results": results,
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_demo_svg(results, svg_path, generated_at)
+    _write_demo_markdown(results, md_path, generated_at, svg_path.name)
+    return {
+        **payload,
+        "artifacts": {
+            "json": str(json_path),
+            "markdown": str(md_path),
+            "screenshot": str(svg_path),
+            "json_url": f"/artifacts/demo_acceptance/{json_path.name}",
+            "markdown_url": f"/artifacts/demo_acceptance/{md_path.name}",
+            "screenshot_url": f"/artifacts/demo_acceptance/{svg_path.name}",
+        },
     }
 
 
@@ -536,6 +688,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/history":
             _json_response(self, 200, load_history())
             return
+        if parsed.path == "/api/adaptive-rules":
+            _json_response(self, 200, list_adaptive_rules())
+            return
+        if parsed.path.startswith("/artifacts/demo_acceptance/"):
+            self._serve_demo_artifact(parsed.path)
+            return
         self._serve_static(parsed.path)
 
     def do_POST(self):  # noqa: N802
@@ -576,12 +734,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/analyze-miss":
                 _json_response(self, 200, analyze_missed_detection(payload))
                 return
+            if parsed.path == "/api/adaptive-rules/toggle":
+                rule = set_rule_enabled(str(payload.get("rule_id") or ""), bool(payload.get("enabled")))
+                if rule is None:
+                    _json_response(self, 404, {"error": "unknown adaptive rule"})
+                    return
+                _json_response(self, 200, list_adaptive_rules())
+                return
+            if parsed.path == "/api/adaptive-rules/delete":
+                deleted = delete_adaptive_rule(str(payload.get("rule_id") or ""))
+                if not deleted:
+                    _json_response(self, 404, {"error": "unknown adaptive rule"})
+                    return
+                _json_response(self, 200, list_adaptive_rules())
+                return
             if parsed.path == "/api/history/clear":
                 clear_history()
                 _json_response(self, 200, load_history())
                 return
             if parsed.path == "/api/run-all":
                 _json_response(self, 200, build_dashboard_summary())
+                return
+            if parsed.path == "/api/demo-run":
+                result = run_demo_acceptance()
+                for item in result["results"]:
+                    record_history("demo", item)
+                _json_response(self, 200, result)
                 return
             _json_response(self, 404, {"error": "unknown endpoint"})
         except Exception as exc:  # pragma: no cover - 防止前端得到空响应
@@ -590,6 +768,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _serve_static(self, request_path: str) -> None:
         target = resolve_static_path(request_path)
         if target is None:
+            self.send_error(404)
+            return
+        body = target.read_bytes()
+        content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_demo_artifact(self, request_path: str) -> None:
+        name = unquote(request_path.rsplit("/", 1)[-1])
+        target = (DEMO_DIR / name).resolve()
+        try:
+            target.relative_to(DEMO_DIR.resolve())
+        except ValueError:
+            self.send_error(404)
+            return
+        if not target.is_file():
             self.send_error(404)
             return
         body = target.read_bytes()

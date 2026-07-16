@@ -437,3 +437,33 @@ Validation:
 - `.\.venv\Scripts\python -m pytest` passed: 60 tests passed.
 - `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 30 total cases, 22/22 attacks detected, 0 blocking false positives, 2 benign flags.
 - Anomaly layer distribution now includes 5 blocks and 7 flags in the offline evaluation.
+
+## Stage 20 - Rules management and acceptance demo
+
+Commit message: `feat: add rules management and demo acceptance`
+
+Completed scope:
+
+- Upgrade adaptive rules with `source`, `enabled`, `hit_count`, `created_at`, and `last_hit_at` metadata while keeping old rule files compatible.
+- Count adaptive-rule hits when PolicyLayer matches a rule.
+- Add rule-management API endpoints:
+  - `GET /api/adaptive-rules`
+  - `POST /api/adaptive-rules/toggle`
+  - `POST /api/adaptive-rules/delete`
+- Add a Dashboard rules-management panel with source, hit count, enabled/disabled status, toggle, and revoke actions.
+- Add an attack-chain view to the DeepSeek detail modal: user request -> model output/attack point -> tool call -> taint source -> defense-layer hit.
+- Add one-click acceptance demo mode through `POST /api/demo-run`.
+- Generate demo artifacts under `sandbox_runs/demo_acceptance/`: Markdown record, JSON result, and SVG screenshot snapshot.
+- Serve demo artifacts through `/artifacts/demo_acceptance/...`.
+- Add tests for adaptive-rule management and acceptance artifact generation.
+- Update project overview, operation guide, and update log.
+
+Validation:
+
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 62 tests passed.
+- Dashboard foreground smoke test passed: `GET /` returned `200`.
+- `GET /api/adaptive-rules` returned rule summary.
+- `POST /api/demo-run` returned 7 surfaces and 7/7 detected.
+- Generated `.svg` screenshot and `.md` acceptance record were both served with HTTP 200.

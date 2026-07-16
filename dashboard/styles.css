@@ -807,6 +807,140 @@ textarea,
   max-height: calc(100vh - 250px);
 }
 
+.chain-view {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) 24px minmax(150px, 1fr) 24px minmax(140px, .9fr) 24px minmax(120px, .7fr) 24px minmax(140px, .8fr);
+  gap: 8px;
+  align-items: stretch;
+}
+
+.chain-node {
+  border: 1px solid var(--line);
+  background: #101720;
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chain-node strong {
+  font-size: 12px;
+}
+
+.chain-node span {
+  color: #cbd7e6;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.chain-node.attack,
+.chain-node.block {
+  border-color: rgba(255, 107, 107, .62);
+}
+
+.chain-node.flag {
+  border-color: rgba(240, 184, 74, .62);
+}
+
+.chain-node.allow {
+  border-color: rgba(83, 216, 106, .62);
+}
+
+.chain-arrow {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+}
+
+.rules-list,
+.demo-table {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.rule-item,
+.demo-row {
+  border: 1px solid var(--line);
+  background: #111821;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.rule-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+}
+
+.rule-item.disabled {
+  opacity: .62;
+}
+
+.rule-main {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.rule-main p {
+  margin: 0;
+  color: #cbd7e6;
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rule-main small {
+  color: var(--muted);
+}
+
+.rule-actions,
+.demo-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.danger-action {
+  border-color: rgba(255, 107, 107, .55);
+  color: #ffb0b0;
+}
+
+.demo-result {
+  margin-top: 14px;
+}
+
+.demo-summary {
+  margin-bottom: 12px;
+}
+
+.ghost-link {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #192231;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 13px;
+}
+
+.demo-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 110px 90px minmax(280px, 1.6fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.demo-row small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 .form-grid {
   margin-top: 16px;
   display: grid;
@@ -884,6 +1018,7 @@ textarea {
   .detail-grid,
   .generated-grid,
   .modal-grid,
+  .chain-view,
   .detail-two-col,
   .layer-detail-grid,
   .deepseek-controls,
@@ -913,5 +1048,12 @@ textarea {
   }
   .modal-grid .structured-detail {
     max-height: 42vh;
+  }
+  .chain-arrow {
+    display: none;
+  }
+  .rule-item,
+  .demo-row {
+    grid-template-columns: 1fr;
   }
 }

@@ -6,6 +6,8 @@ const state = {
   selectedCaseId: null,
   audit: [],
   history: { entries: [], summary: { total: 0, actions: {}, layers: {}, categories: {}, avg_latency_ms: 0 } },
+  adaptiveRules: { rules: [], summary: { total: 0, enabled: 0, disabled: 0, hits: 0 } },
+  demoResult: null,
   batchResults: [],
   batchAnalyses: {},
   selectedBatchIndex: null,
@@ -112,9 +114,15 @@ async function loadHistory() {
   renderAudit();
 }
 
+async function loadAdaptiveRules() {
+  state.adaptiveRules = await api("/api/adaptive-rules");
+  renderRules();
+}
+
 async function refreshAll() {
   await loadSummary();
   await loadHistory();
+  await loadAdaptiveRules();
 }
 
 function renderMetrics() {
@@ -339,6 +347,34 @@ function jsonDetails(title, value) {
   `;
 }
 
+function attackChainHtml(result) {
+  const redteam = result.redteam || {};
+  const caseData = result.case || {};
+  const context = result.context || {};
+  const taints = redteam.tainted_sources || caseData.tainted_sources || context.tainted_sources || [];
+  const hits = ((result.decision || {}).verdicts || []).filter((verdict) => verdict.action !== "allow");
+  const modelOutput = redteam.attack_goal || redteam.danger_explanation || caseData.description || "离线样本";
+  const toolCall = caseData.tool_call || redteam.tool_call || {};
+  const chainNodes = [
+    { title: "用户请求", body: redteam.user_request || caseData.user_request || "未提供", tone: "neutral" },
+    { title: "模型输出/攻击点", body: modelOutput, tone: "attack" },
+    { title: "工具调用", body: `${toolCall.name || "tool"} ${shortTool(result)}`, tone: "neutral" },
+    { title: "污点来源", body: (taints.length ? taints.join(", ") : "无显式污点"), tone: taints.length ? "flag" : "neutral" },
+    {
+      title: "防御命中",
+      body: hits.length ? hits.map((item) => `${item.layer}:${item.action}`).join(", ") : "四层均放行",
+      tone: hits.some((item) => item.action === "block") ? "block" : (hits.length ? "flag" : "allow"),
+    },
+  ];
+  return chainNodes.map((node, index) => `
+    <div class="chain-node ${escapeHtml(node.tone)}">
+      <strong>${escapeHtml(node.title)}</strong>
+      <span>${escapeHtml(node.body)}</span>
+    </div>
+    ${index < chainNodes.length - 1 ? `<div class="chain-arrow">→</div>` : ""}
+  `).join("");
+}
+
 function renderToolDetail(toolCall) {
   const call = toolCall || {};
   return `
@@ -503,6 +539,7 @@ function openBatchDetail(index) {
       </span>
     `).join("")}
   `;
+  el("modalChain").innerHTML = attackChainHtml(result);
   el("modalAttackDetail").innerHTML = redteamDetailHtml(result, { compact: false });
   renderGuardianDetail(result, analysis, index, "modalGuardianDetail");
   el("batchDetailModal").hidden = false;
@@ -693,9 +730,123 @@ async function analyzeMiss(index) {
     if (modalOpen) {
       openBatchDetail(index);
     }
+    await loadAdaptiveRules();
     addAudit("adaptive-rule", "flag", "DeepSeek 已分析漏拦截并同步自适应规则", `${(analysis.applied_rules || []).length} rules`);
   } catch (err) {
     addAudit("adaptive-rule", "block", "DeepSeek 漏拦截分析失败", err.message);
+  }
+}
+
+function ruleMatchFields(rule) {
+  const fields = [];
+  if (rule.tool_name) {
+    fields.push(`tool=${rule.tool_name}`);
+  }
+  if (rule.surface_id) {
+    fields.push(`surface=${rule.surface_id}`);
+  }
+  ["user_request_contains_any", "input_contains_any", "metadata_contains_any"].forEach((field) => {
+    if ((rule[field] || []).length) {
+      fields.push(`${field.replace("_contains_any", "")}: ${(rule[field] || []).slice(0, 3).join(" / ")}`);
+    }
+  });
+  return fields;
+}
+
+function renderRules() {
+  const payload = state.adaptiveRules || { rules: [], summary: {} };
+  const summary = payload.summary || {};
+  el("rulesSummary").textContent = `共 ${summary.total || 0} 条 · 启用 ${summary.enabled || 0} · 停用 ${summary.disabled || 0} · 命中 ${summary.hits || 0} 次`;
+  const list = el("rulesList");
+  if (!(payload.rules || []).length) {
+    list.innerHTML = `<div class="empty-state">暂无自适应规则。漏拦截分析生成规则后会显示在这里。</div>`;
+    return;
+  }
+  list.innerHTML = payload.rules.map((rule) => `
+    <article class="rule-item ${rule.enabled ? "" : "disabled"}">
+      <div class="rule-main">
+        <div class="case-line">
+          <strong>${escapeHtml(rule.description || rule.id)}</strong>
+          <span class="decision-pill ${rule.enabled ? "allow" : "neutral"}">${rule.enabled ? "ENABLED" : "DISABLED"}</span>
+        </div>
+        <p>${escapeHtml(ruleMatchFields(rule).join(" · ") || "无匹配字段")}</p>
+        <small>来源：${escapeHtml(rule.source || "unknown")} · 命中 ${escapeHtml(rule.hit_count || 0)} 次 · ID ${escapeHtml(rule.id)}</small>
+      </div>
+      <div class="rule-actions">
+        <button class="ghost-button mini-action" data-toggle-rule="${escapeHtml(rule.id)}" data-enabled="${rule.enabled ? "false" : "true"}">${rule.enabled ? "停用" : "启用"}</button>
+        <button class="ghost-button mini-action danger-action" data-delete-rule="${escapeHtml(rule.id)}">撤销</button>
+      </div>
+    </article>
+  `).join("");
+  list.querySelectorAll("[data-toggle-rule]").forEach((button) => {
+    button.addEventListener("click", () => toggleRule(button.dataset.toggleRule, button.dataset.enabled === "true"));
+  });
+  list.querySelectorAll("[data-delete-rule]").forEach((button) => {
+    button.addEventListener("click", () => deleteRule(button.dataset.deleteRule));
+  });
+}
+
+async function toggleRule(ruleId, enabled) {
+  state.adaptiveRules = await api("/api/adaptive-rules/toggle", {
+    method: "POST",
+    body: JSON.stringify({ rule_id: ruleId, enabled }),
+  });
+  renderRules();
+}
+
+async function deleteRule(ruleId) {
+  state.adaptiveRules = await api("/api/adaptive-rules/delete", {
+    method: "POST",
+    body: JSON.stringify({ rule_id: ruleId }),
+  });
+  renderRules();
+}
+
+function renderDemoResult() {
+  const result = state.demoResult;
+  const node = el("demoResult");
+  if (!result) {
+    node.className = "demo-result empty-state";
+    node.textContent = "尚未运行演示验收";
+    return;
+  }
+  const artifacts = result.artifacts || {};
+  node.className = "demo-result";
+  node.innerHTML = `
+    <div class="demo-summary">
+      <span class="decision-pill block">检出 ${escapeHtml(result.detected)}/${escapeHtml(result.total)}</span>
+      <span class="tag">block ${escapeHtml((result.actions || {}).block || 0)}</span>
+      <span class="tag">flag ${escapeHtml((result.actions || {}).flag || 0)}</span>
+      <a class="ghost-link" href="${escapeHtml(artifacts.markdown_url || "#")}" target="_blank">验收记录</a>
+      <a class="ghost-link" href="${escapeHtml(artifacts.screenshot_url || "#")}" target="_blank">截图快照</a>
+      <a class="ghost-link" href="${escapeHtml(artifacts.json_url || "#")}" target="_blank">JSON</a>
+    </div>
+    <div class="demo-table">
+      ${(result.results || []).map((item, index) => `
+        <div class="demo-row">
+          <strong>${index + 1}. ${escapeHtml((item.surface || {}).title || (item.surface || {}).id)}</strong>
+          <span>${escapeHtml(((item.case || {}).tool_call || {}).name || "tool")}</span>
+          <span class="decision-pill ${actionClass((item.decision || {}).action)}">${actionLabel((item.decision || {}).action)}</span>
+          <small>${escapeHtml((item.decision || {}).reason || "")}</small>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+async function runDemoAcceptance() {
+  el("demoRunBtn").disabled = true;
+  el("demoResult").className = "demo-result empty-state";
+  el("demoResult").textContent = "正在运行 7 个攻击面并生成验收记录...";
+  try {
+    state.demoResult = await api("/api/demo-run", { method: "POST", body: "{}" });
+    renderDemoResult();
+    await loadHistory();
+  } catch (err) {
+    el("demoResult").className = "demo-result empty-state";
+    el("demoResult").textContent = err.message;
+  } finally {
+    el("demoRunBtn").disabled = false;
   }
 }
 
@@ -708,6 +859,8 @@ function renderAll() {
   renderDeepSeekStatus();
   renderSurfaceLab();
   renderBatchMatrix();
+  renderRules();
+  renderDemoResult();
   const selected = state.data.results.find((item) => item.case.id === state.selectedCaseId);
   if (selected) {
     renderDecision(selected);
@@ -785,6 +938,8 @@ function bindEvents() {
   el("refreshBtn").addEventListener("click", refreshAll);
   el("runAllBtn").addEventListener("click", runAll);
   el("customRunBtn").addEventListener("click", evaluateCustom);
+  el("rulesRefreshBtn").addEventListener("click", loadAdaptiveRules);
+  el("demoRunBtn").addEventListener("click", runDemoAcceptance);
   el("deepseekRunBtn").addEventListener("click", () => runDeepSeekRedTeam());
   el("deepseekSurface").addEventListener("change", () => {
     syncModeOptions(true);

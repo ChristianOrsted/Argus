@@ -1,5 +1,29 @@
 # Argus Update Log
 
+## 2026-07-16 - Rules Management And Acceptance Demo
+
+本次 B/D 方向优化：
+
+- 自适应规则从简单 JSON 列表升级为可管理规则，兼容旧规则并新增 `source`、`enabled`、`hit_count`、`created_at`、`last_hit_at` 字段。
+- `PolicyLayer` 命中自适应规则时会自动累加命中次数，停用规则不会参与匹配。
+- 新增 Dashboard API：`GET /api/adaptive-rules`、`POST /api/adaptive-rules/toggle`、`POST /api/adaptive-rules/delete`。
+- 新增规则管理页：展示规则来源、命中次数、启停状态，并支持停用、启用和撤销。
+- 攻击详情弹窗新增攻击链视图，把用户请求、模型输出/攻击点、工具调用、污点来源和防御层命中串成链路图。
+- 新增一键演示脚本模式：`POST /api/demo-run` 固定运行 7 个攻击面，并写入历史审计流。
+- 一键演示会生成验收产物：`sandbox_runs/demo_acceptance/argus_demo_*.md`、`.json`、`.svg`。
+- Dashboard 通过 `/artifacts/demo_acceptance/...` 提供验收记录和 SVG 截图快照访问。
+- 新增测试覆盖自适应规则命中计数、启停、撤销，以及一键演示产物生成。
+
+本次验证结果：
+
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：62 passed。
+- Dashboard 前台 smoke test 通过：`GET http://127.0.0.1:8765/` 返回 `200`。
+- 规则管理接口通过：`GET /api/adaptive-rules` 返回规则 summary。
+- 一键演示接口通过：`POST /api/demo-run` 返回 7 个攻击面，7/7 检出。
+- 演示产物链接通过：生成的 `.svg` 截图快照和 `.md` 验收记录均可通过 HTTP 打开。
+
 ## 2026-07-16 - DeepSeek Detail Modal And Anomaly Layer Upgrade
 
 本次新增功能：
