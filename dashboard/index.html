@@ -127,12 +127,30 @@
           <div id="batchMatrix" class="batch-matrix"></div>
           <div class="generated-grid">
             <div>
-              <span class="field-label">选中条目：DeepSeek 生成的攻击说明</span>
+              <span class="field-label">选中条目：攻击摘要（点击条目查看完整审计）</span>
               <div id="deepseekOutput" class="structured-detail empty-state">尚未选择攻击条目</div>
             </div>
-            <div>
-              <span class="field-label">选中条目：Guardian / 漏拦截分析</span>
-              <div id="deepseekDecision" class="structured-detail empty-state">尚未选择攻击条目</div>
+          </div>
+          <div id="batchDetailModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <div class="modal-card">
+              <div class="modal-head">
+                <div>
+                  <p class="eyebrow">DeepSeek Attack Detail</p>
+                  <h3 id="modalTitle">攻击与审计详情</h3>
+                </div>
+                <button id="modalCloseBtn" class="ghost-button">关闭</button>
+              </div>
+              <div id="modalStatusRow" class="modal-status-row"></div>
+              <div class="modal-grid">
+                <div>
+                  <span class="field-label">攻击点</span>
+                  <div id="modalAttackDetail" class="structured-detail"></div>
+                </div>
+                <div>
+                  <span class="field-label">审计阻断结果</span>
+                  <div id="modalGuardianDetail" class="structured-detail"></div>
+                </div>
+              </div>
             </div>
           </div>
         </article>

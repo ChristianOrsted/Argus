@@ -349,13 +349,12 @@ function renderToolDetail(toolCall) {
   `;
 }
 
-function renderRedteamDetail(result) {
+function redteamDetailHtml(result, { compact = false } = {}) {
   const redteam = result.redteam || {};
   const caseData = result.case || {};
   const toolCall = redteam.tool_call || caseData.tool_call || {};
-  const node = el("deepseekOutput");
-  node.className = "structured-detail";
-  node.innerHTML = `
+  const riskPoints = redteam.risk_points || [];
+  const head = `
     <div class="detail-block">
       <div class="detail-heading">
         <span class="tag attack">${escapeHtml(redteam.attack_surface || (result.surface || {}).id || caseData.category || "deepseek")}</span>
@@ -363,7 +362,24 @@ function renderRedteamDetail(result) {
       </div>
       <h4>${escapeHtml(redteam.attack_goal || caseData.description || "DeepSeek 生成的红队样本")}</h4>
       <p>${escapeHtml(redteam.danger_explanation || "模型未返回 danger_explanation，可查看原始 JSON。")}</p>
+      ${compact ? `<button class="ghost-button mini-action summary-open-btn" data-open-selected-detail>查看完整攻击与审计结果</button>` : ""}
     </div>
+  `;
+  if (compact) {
+    return `
+      ${head}
+      <div class="detail-block">
+        <h4>用户请求</h4>
+        <p>${escapeHtml(redteam.user_request || caseData.user_request || "未提供")}</p>
+      </div>
+      <div class="detail-block">
+        <h4>关键风险点</h4>
+        ${bulletList(riskPoints.slice(0, 4))}
+      </div>
+    `;
+  }
+  return `
+    ${head}
     <div class="detail-block">
       <h4>用户请求</h4>
       <p>${escapeHtml(redteam.user_request || caseData.user_request || "未提供")}</p>
@@ -386,7 +402,16 @@ function renderRedteamDetail(result) {
   `;
 }
 
-function renderGuardianDetail(result, analysisPayload, index) {
+function renderRedteamDetail(result) {
+  const node = el("deepseekOutput");
+  node.className = "structured-detail attack-summary";
+  node.innerHTML = redteamDetailHtml(result, { compact: true });
+  node.querySelectorAll("[data-open-selected-detail]").forEach((button) => {
+    button.addEventListener("click", () => openBatchDetail(state.selectedBatchIndex));
+  });
+}
+
+function guardianDetailHtml(result, analysisPayload, index) {
   const decision = result.decision || {};
   const verdicts = decision.verdicts || [];
   const analysis = (analysisPayload || {}).analysis || null;
@@ -394,9 +419,7 @@ function renderGuardianDetail(result, analysisPayload, index) {
   const recheck = (analysisPayload || {}).recheck_result || null;
   const missed = isMissed(result);
   const canAnalyze = decision.action !== "block";
-  const node = el("deepseekDecision");
-  node.className = "structured-detail";
-  node.innerHTML = `
+  return `
     <div class="detail-block ${missed ? "missed" : ""}">
       <div class="detail-heading">
         <span class="decision-pill ${actionClass(displayAction(result))}">总状态 ${actionLabel(displayAction(result))}</span>
@@ -443,9 +466,50 @@ function renderGuardianDetail(result, analysisPayload, index) {
       latency_ms: result.latency_ms,
     })}
   `;
+}
+
+function attachAnalysisButtons(node) {
   node.querySelectorAll("[data-analyze-selected]").forEach((button) => {
     button.addEventListener("click", () => analyzeMiss(Number(button.dataset.analyzeSelected)));
   });
+}
+
+function renderGuardianDetail(result, analysisPayload, index, targetId = "modalGuardianDetail") {
+  const node = el(targetId);
+  if (!node) {
+    return;
+  }
+  node.className = "structured-detail";
+  node.innerHTML = guardianDetailHtml(result, analysisPayload, index);
+  attachAnalysisButtons(node);
+}
+
+function openBatchDetail(index) {
+  const result = state.batchResults[index];
+  if (!result) {
+    return;
+  }
+  selectBatchItem(index);
+  const redteam = result.redteam || {};
+  const caseData = result.case || {};
+  const analysis = state.batchAnalyses[index];
+  el("modalTitle").textContent = redteam.attack_goal || caseData.description || `DeepSeek 条目 ${index + 1}`;
+  el("modalStatusRow").innerHTML = `
+    <span class="decision-pill ${actionClass(displayAction(result))}">总 ${actionLabel(displayAction(result))}</span>
+    ${LAYER_ORDER.map((layer, layerIndex) => `
+      <span class="modal-layer-chip">
+        ${layerIndex + 1}. ${escapeHtml(layer)}
+        ${statusDot(layerAction(result, layer), layer)}
+      </span>
+    `).join("")}
+  `;
+  el("modalAttackDetail").innerHTML = redteamDetailHtml(result, { compact: false });
+  renderGuardianDetail(result, analysis, index, "modalGuardianDetail");
+  el("batchDetailModal").hidden = false;
+}
+
+function closeBatchDetail() {
+  el("batchDetailModal").hidden = true;
 }
 
 function renderBatchMatrix() {
@@ -461,7 +525,6 @@ function renderBatchMatrix() {
     const redteam = result.redteam || {};
     const active = index === state.selectedBatchIndex ? "active" : "";
     const missed = isMissed(result);
-    const canAnalyze = decision.action !== "block";
     const totalAction = displayAction(result);
     const totalTitle = missed
       ? "MISS: DeepSeek expected block/flag, but Guardian allowed"
@@ -475,17 +538,17 @@ function renderBatchMatrix() {
         </div>
         <span>${statusDot(totalAction, totalTitle)}</span>
         ${LAYER_ORDER.map((layer) => statusDot(layerAction(result, layer), layer)).join("")}
-        <button class="ghost-button mini-action" data-analyze-index="${index}" ${canAnalyze ? "" : "disabled"}>分析漏拦截</button>
+        <button class="ghost-button mini-action" data-open-index="${index}">查看详情</button>
       </div>
     `;
   }).join("");
   matrix.querySelectorAll("[data-batch-index]").forEach((node) => {
-    node.addEventListener("click", () => selectBatchItem(Number(node.dataset.batchIndex)));
+    node.addEventListener("click", () => openBatchDetail(Number(node.dataset.batchIndex)));
   });
-  matrix.querySelectorAll("[data-analyze-index]").forEach((node) => {
+  matrix.querySelectorAll("[data-open-index]").forEach((node) => {
     node.addEventListener("click", (event) => {
       event.stopPropagation();
-      analyzeMiss(Number(node.dataset.analyzeIndex));
+      openBatchDetail(Number(node.dataset.openIndex));
     });
   });
 }
@@ -499,9 +562,7 @@ function selectBatchItem(index) {
   state.selectedBatchIndex = index;
   renderBatchMatrix();
   renderDecision(result);
-  const analysis = state.batchAnalyses[index];
   renderRedteamDetail(result);
-  renderGuardianDetail(result, analysis, index);
 }
 
 function renderDecision(result) {
@@ -566,8 +627,7 @@ async function runDeepSeekRedTeam(surfaceId) {
   }
   el("deepseekOutput").className = "structured-detail empty-state";
   el("deepseekOutput").textContent = "DeepSeek 正在批量生成红队样本...";
-  el("deepseekDecision").className = "structured-detail empty-state";
-  el("deepseekDecision").textContent = "等待 Guardian 批量审计...";
+  closeBatchDetail();
   el("deepseekRunBtn").disabled = true;
   try {
     const batch = await api("/api/deepseek-redteam-batch", {
@@ -590,8 +650,8 @@ async function runDeepSeekRedTeam(surfaceId) {
     }
     await loadHistory();
   } catch (err) {
-    el("deepseekDecision").className = "structured-detail";
-    el("deepseekDecision").innerHTML = `
+    el("deepseekOutput").className = "structured-detail";
+    el("deepseekOutput").innerHTML = `
       <div class="detail-block missed">
         <h4>DeepSeek 红队调用失败</h4>
         <p>${escapeHtml(err.message)}</p>
@@ -609,8 +669,11 @@ async function analyzeMiss(index) {
   if (!result) {
     return;
   }
-  el("deepseekDecision").className = "structured-detail empty-state";
-  el("deepseekDecision").textContent = "DeepSeek 正在分析漏拦截原因并生成受限防御规则...";
+  const modalOpen = !el("batchDetailModal").hidden;
+  if (modalOpen) {
+    el("modalGuardianDetail").className = "structured-detail empty-state";
+    el("modalGuardianDetail").textContent = "DeepSeek 正在分析漏拦截原因并生成受限防御规则...";
+  }
   try {
     const analysis = await api("/api/analyze-miss", {
       method: "POST",
@@ -627,6 +690,9 @@ async function analyzeMiss(index) {
     }
     renderBatchMatrix();
     selectBatchItem(index);
+    if (modalOpen) {
+      openBatchDetail(index);
+    }
     addAudit("adaptive-rule", "flag", "DeepSeek 已分析漏拦截并同步自适应规则", `${(analysis.applied_rules || []).length} rules`);
   } catch (err) {
     addAudit("adaptive-rule", "block", "DeepSeek 漏拦截分析失败", err.message);
@@ -730,6 +796,17 @@ function bindEvents() {
     const surface = el("deepseekSurface").value;
     const mode = el("deepseekMode").value || "default";
     state.promptSurfaceId = `${surface}:${mode}`;
+  });
+  el("modalCloseBtn").addEventListener("click", closeBatchDetail);
+  el("batchDetailModal").addEventListener("click", (event) => {
+    if (event.target === el("batchDetailModal")) {
+      closeBatchDetail();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !el("batchDetailModal").hidden) {
+      closeBatchDetail();
+    }
   });
   el("clearAuditBtn").addEventListener("click", () => {
     state.audit = [];

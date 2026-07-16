@@ -523,7 +523,7 @@ textarea,
 .generated-grid {
   margin-top: 16px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -627,6 +627,11 @@ textarea,
   display: block;
 }
 
+.attack-summary {
+  min-height: 170px;
+  max-height: 300px;
+}
+
 .detail-block {
   border: 1px solid var(--line);
   background: #111821;
@@ -726,6 +731,82 @@ textarea,
   font-size: 13px;
 }
 
+.summary-open-btn {
+  justify-self: start;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(5, 9, 14, .72);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.modal-card {
+  width: min(1180px, 100%);
+  max-height: min(860px, calc(100vh - 48px));
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .42);
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.modal-head h3 {
+  margin: 0;
+}
+
+.modal-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.modal-layer-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #cbd7e6;
+  font-size: 12px;
+}
+
+.modal-layer-chip .status-dot-mini {
+  width: 12px;
+  height: 12px;
+}
+
+.modal-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(320px, .9fr) minmax(380px, 1.1fr);
+  gap: 14px;
+}
+
+.modal-grid .structured-detail {
+  max-height: calc(100vh - 250px);
+}
+
 .form-grid {
   margin-top: 16px;
   display: grid;
@@ -802,6 +883,7 @@ textarea {
   .analysis-grid,
   .detail-grid,
   .generated-grid,
+  .modal-grid,
   .detail-two-col,
   .layer-detail-grid,
   .deepseek-controls,
@@ -822,5 +904,14 @@ textarea {
   }
   .wide-control {
     grid-column: auto;
+  }
+  .modal-backdrop {
+    padding: 12px;
+  }
+  .modal-card {
+    max-height: calc(100vh - 24px);
+  }
+  .modal-grid .structured-detail {
+    max-height: 42vh;
   }
 }

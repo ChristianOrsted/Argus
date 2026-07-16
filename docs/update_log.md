@@ -1,5 +1,25 @@
 # Argus Update Log
 
+## 2026-07-16 - DeepSeek Detail Modal And Anomaly Layer Upgrade
+
+本次新增功能：
+
+- DeepSeek 批量红队区改为“矩阵 + 攻击摘要 + 弹窗详情”结构，避免攻击说明和 Guardian 审计结果在主页面双列挤压。
+- 点击任意批量条目或“查看详情”按钮，会弹出完整详情：左侧展示攻击点、用户请求、工具调用、风险点，右侧展示总决策、四层 Verdict、漏拦截分析和自适应规则写入结果。
+- 主页面下方只保留当前选中条目的攻击摘要，完整 Guardian 结果交给弹窗和下方通用 `Guardian Decision` 面板展示。
+- `AnomalyLayer` 从单一重复调用检测升级为三类启发式：重复工具循环、DeepSeek 红队攻击链元数据、读取/抓取后跳转高影响工具或外联目标共现。
+- 新增离线攻击样本 `an-002`：读取系统日志并外联到 `evil.example`，用于展示第 4 层 anomaly 的 `BLOCK` 能力。
+- 新增 anomaly 单元测试，覆盖 DeepSeek 红队元数据、读取外联链路和读取后高影响工具跳转。
+- 更新评测结果，离线集变为 30 条：22 条攻击、8 条良性对照。
+
+本次验证结果：
+
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：60 passed。
+- Benchmark 通过：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警。
+- 第 4 层统计不再全绿：`anomaly` 层在离线评测中产生 5 次 `BLOCK`、7 次 `FLAG`。
+
 ## 2026-07-16 - DeepSeek Red Team UX And Prompt Modes
 
 本次新增功能：

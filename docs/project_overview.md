@@ -76,7 +76,7 @@ Guardian 四层防御：
 - `PolicyLayer`：确定性规则层。拦截危险 shell、未知工具、沙箱外文件读写、敏感凭据读取、记忆中毒写入，并利用 DeepSeek 红队元数据对“期望阻断”的攻击链候选动作做兜底阻断。
 - `TaintLayer`：污点追踪层。把 `web_fetch`、`read_file` 视为不可信来源；同时抽取具体文本片段、摘要和来源工具调用 ID。若片段流入 `run_shell` / `write_file` 等高权限动作，则按证据告警或阻断。
 - `IntentLayer`：意图一致性层。提供可插拔 judge 接口和 `DeepSeekIntentJudge`，用于判断工具调用是否符合用户原始意图。默认关闭，避免离线演示依赖 API Key。
-- `AnomalyLayer`：序列异常层。当前实现重复工具调用检测，后续可扩展为 n-gram 或 Markov 行为模型。
+- `AnomalyLayer`：序列异常层。检测重复调用、DeepSeek 红队攻击链元数据、读取/抓取后跳转高影响工具、读取动作与外联目标共现等异常序列。
 - `adaptive_rules.py`：前端漏拦截分析写入的受限自适应规则。规则只做字段包含匹配，不执行代码。
 
 四层如何实际工作：
@@ -101,9 +101,9 @@ Guardian 四层防御：
 
 4. `AnomalyLayer` 做工具调用序列层面的异常检测。
 
-   前三层主要看“当前这一次调用是否危险”，而异常层看“这次调用放在历史序列里是否反常”。当前 v1 使用轻量启发式：如果同一个工具在最近调用中连续重复超过阈值，就 `FLAG` 为疑似异常循环。虽然它还不是完整行为模型，但已经把序列异常层的接口和数据流跑通，后续可以替换为 n-gram、Markov 或基于良性轨迹训练的异常分数模型。
+   前三层主要看“当前这一次调用是否危险”，而异常层看“这次调用放在历史序列和红队上下文里是否反常”。当前实现包含三类可解释启发式：同一工具连续重复超过阈值时 `FLAG` 为异常循环；DeepSeek 红队元数据中出现 `delete_database`、`send_http`、`evil.example`、外联、非白名单等攻击链关键词时直接 `BLOCK`；读取/抓取动作与外联目标共现，或读取/抓取之后突然跳转到 `run_shell` / `write_file` 等高影响工具时，按风险 `FLAG` 或 `BLOCK`。
 
-   这一层的价值在于处理单次调用看似正常、但调用序列异常的智能体行为，例如重复抓取、重复写文件、循环执行工具、突然从低风险查询跳到高风险执行等。
+   这一层的价值在于处理单次调用看似正常、但调用序列异常的智能体行为。例如 DeepSeek 生成的 `read_file /var/log/syslog` 当前动作本身只是读取，但用户请求和风险点要求把结果发送到 `evil.example`，第 4 层会把它识别为数据外泄攻击链前序步骤；间接提示注入从网页/文件读取后跳到写计划或 shell 执行，也会被识别为序列提权或意图漂移。
 
 四层之间不是互相替代，而是互补：
 
@@ -131,7 +131,7 @@ Guardian 四层防御：
 
 已有样本：
 
-- 攻击样本 21 条。
+- 攻击样本 22 条。
 - 良性对照 8 条。
 - 覆盖提示注入、模型越狱、训练数据泄露、工具调用劫持、间接提示注入、记忆中毒、环境感知污染、序列异常等场景。
 
@@ -213,7 +213,7 @@ Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求
 - `src/guardian/policy.py`：解释策略层规则组、执行顺序和 DeepSeek 红队元数据兜底。
 - `src/guardian/taint.py`：解释来源级污点、片段级污点和高权限 sink 判断。
 - `src/guardian/intent.py`：解释 DeepSeek intent judge 的结构化输入输出和风险分级。
-- `src/guardian/anomaly.py`：解释当前重复调用启发式，以及后续序列模型替换点。
+- `src/guardian/anomaly.py`：解释重复调用、红队元数据攻击链、读取到高影响工具跳转和外联链路异常检测。
 - `src/guardian/adaptive_rules.py`：解释漏拦截分析生成的受限数据规则为何不会执行模型代码。
 - `src/agent/deepseek_agent.py`：解释 Guardian 如何嵌入到 LLM tool calling 执行前。
 - `src/agent/tools.py`：解释真实工具执行、沙箱、fixture 离线网页和不可信来源。
@@ -477,8 +477,8 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 
 2026-07-16 对抗样本和评测量化增强后已重新验证：
 
-- `.\.venv\Scripts\python scripts\run_benchmark.py`：29 条用例，21 条攻击、8 条良性对照
-- 攻击检出：21/21，召回率 100.00%
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：30 条用例，22 条攻击、8 条良性对照
+- 攻击检出：22/22，召回率 100.00%
 - 阻断型误报：0，良性告警：2
 - 评测报告新增：按攻击面分类指标、四层 Verdict 分布、混淆矩阵、p50/p95 延时和逐样本层级动作
 - 机器可读结果：`report/eval_results.json`

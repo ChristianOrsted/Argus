@@ -412,3 +412,28 @@ Validation:
 - Dashboard foreground smoke test passed: `GET /` returned `200`.
 - Dashboard summary API returned 29 cases, 7 attack surfaces, and 4 DeepSeek prompt modes per surface.
 - Secret scan passed: no real API key was written to tracked files.
+
+## Stage 19 - DeepSeek detail modal and anomaly layer upgrade
+
+Commit message: `feat: improve redteam details and anomaly detection`
+
+Completed scope:
+
+- Simplify the DeepSeek batch area into a matrix plus a compact selected-attack summary.
+- Add a modal detail view opened from each batch row, with attack points on the left and Guardian blocking analysis on the right.
+- Keep missed-detection analysis and adaptive-rule application inside the detail modal.
+- Upgrade `AnomalyLayer` beyond repeated-tool detection:
+  - DeepSeek red-team metadata with attack-chain keywords can now produce `BLOCK`.
+  - Read/fetch steps combined with exfiltration targets can now produce `BLOCK`.
+  - Read/fetch to high-impact tools can now produce `FLAG` or `BLOCK`.
+- Add offline case `an-002` for a read-file exfiltration chain.
+- Sync `datasets/seed_cases.jsonl` and regenerate `report/eval_results.md/json`.
+- Update project overview and update log.
+
+Validation:
+
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 60 tests passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 30 total cases, 22/22 attacks detected, 0 blocking false positives, 2 benign flags.
+- Anomaly layer distribution now includes 5 blocks and 7 flags in the offline evaluation.
