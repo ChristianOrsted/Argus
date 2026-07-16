@@ -467,3 +467,25 @@ Validation:
 - `GET /api/adaptive-rules` returned rule summary.
 - `POST /api/demo-run` returned 7 surfaces and 7/7 detected.
 - Generated `.svg` screenshot and `.md` acceptance record were both served with HTTP 200.
+
+## Stage 21 - Final LaTeX report
+
+Commit message: `docs: add final latex report`
+
+Completed scope:
+
+- Add `report/final_report.tex` as the final course report in LaTeX format.
+- Compile `report/final_report.pdf` for direct review and submission preview.
+- Align the report with the selected topic and required deliverables:
+  - security risk analysis,
+  - adversarial and jailbreak test set,
+  - attack scripts,
+  - demonstrable agent behavior supervision prototype.
+- Include current evaluation metrics: 30 total cases, 22 attacks, 22/22 detected, 0 blocking false positives, 2 benign flags.
+- Add figure placeholders with explicit screenshot instructions for system architecture, Guardian layers, Dashboard overview, DeepSeek attack chain, rules management, benchmark output, and demo acceptance snapshot.
+- Update `docs/project_overview.md` and `docs/update_log.md` to mark the LaTeX report as complete.
+
+Validation:
+
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` completed successfully and generated a 13-page PDF.
+- Secret scan passed: no real API key was written to tracked files.

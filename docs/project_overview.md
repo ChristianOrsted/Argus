@@ -193,6 +193,8 @@ Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求
 - `docs/architecture.md`
 - `docs/operation_guide.md`
 - `docs/project_overview.md`
+- `report/final_report.tex`
+- `report/final_report.pdf`
 - `report/final_report.md`
 - `report/eval_results.md`
 - `report/eval_results.json`
@@ -203,7 +205,9 @@ Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求
 - `architecture.md`：系统架构说明。
 - `operation_guide.md`：Dashboard 启停、端口释放、DeepSeek 在线演示和排障操作指导。
 - `project_overview.md`：总体性说明和验收指南。
-- `final_report.md`：课程报告草稿。
+- `final_report.tex`：课程正式 LaTeX 报告，包含风险分析、系统设计、实验结果和截图占位说明。
+- `final_report.pdf`：由 LaTeX 编译出的 13 页报告预览版。
+- `final_report.md`：早期课程报告草稿。
 - `eval_results.md`：自动生成的评测结果。
 - `eval_results.json`：自动生成的机器可读评测结果，便于后续画图或前端导入。
 - `COMMIT_SUMMARY.md`：阶段 commit 汇总。
@@ -228,7 +232,7 @@ Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求
 
 | 课程要求 | 当前状态 | 对应文件 |
 |---|---|---|
-| 安全风险分析报告 | 已有草稿，后续可继续润色 | `report/final_report.md`, `docs/architecture.md` |
+| 安全风险分析报告 | 已完成 LaTeX 正式报告并生成 PDF 预览 | `report/final_report.tex`, `report/final_report.pdf`, `docs/architecture.md` |
 | 对抗样本与越狱测试集 | 已有可运行种子集 | `datasets/seed_cases.jsonl`, `src/redteam/attacks.py` |
 | 攻击脚本 | 已有，可按 ID 复现 | `scripts/replay_case.py` |
 | 可演示的智能体行为监督原型系统 | 已有，离线可跑，网页可操作，在线 DeepSeek 可接入 | `scripts/offline_demo.py`, `scripts/dashboard_server.py`, `scripts/deepseek_demo.py`, `src/guardian/` |

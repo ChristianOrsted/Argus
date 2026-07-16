@@ -1,5 +1,15 @@
 # Argus Update Log
 
+## 2026-07-16 - Final LaTeX Report
+
+本次定稿文档更新：
+
+- 新增 `report/final_report.tex` 作为课程正式 LaTeX 报告，并生成 `report/final_report.pdf` 预览版。
+- 报告对齐选题要求，覆盖安全风险分析、攻击面威胁模型、四层行为监督机制、对抗样本与越狱测试集、攻击脚本、可演示原型系统和实验结果。
+- 报告写入当前定稿评测数据：30 条样本、22 条攻击、22/22 检出、0 阻断型误报、2 条良性告警。
+- 报告预留系统架构图、四层防御流程图、Dashboard 总览、DeepSeek 攻击链弹窗、规则管理页、Benchmark 结果和一键演示验收快照等图位，并附有每张图应放什么内容的文字说明。
+- 更新 `docs/project_overview.md`，将安全风险分析报告状态标记为 LaTeX 正式报告已完成。
+
 ## 2026-07-16 - Rules Management And Acceptance Demo
 
 本次 B/D 方向优化：
