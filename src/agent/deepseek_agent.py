@@ -60,6 +60,12 @@ class DeepSeekReActAgent:
             return json.loads(resp.read().decode("utf-8"))
 
     def run(self, user_request: str, max_steps: int = 10) -> str:
+        """运行 ReAct 循环，并在每次工具执行前插入 Guardian 检查点。
+
+        这是“可嵌入式监督”的核心位置：Agent 仍然按 LLM tool calling 工作，
+        但任何真实工具调用都必须先经过 `guardian.evaluate`。如果被 BLOCK，
+        拦截结果会作为 tool message 回给模型，真实工具不会执行。
+        """
         ctx = Context(user_request=user_request)
         messages = [
             {"role": "system", "content": self.system},
@@ -79,6 +85,7 @@ class DeepSeekReActAgent:
             messages.append(message)
 
             for tool_call in tool_calls:
+                # 把 DeepSeek/OpenAI tool_call 转换成项目统一的 ToolCall 数据结构。
                 function = tool_call["function"]
                 try:
                     tool_input = json.loads(function.get("arguments") or "{}")
@@ -93,6 +100,7 @@ class DeepSeekReActAgent:
                 self.on_event("tool_call", {"call": call})
 
                 if self.guardian is not None:
+                    # 关键安全检查点：真实执行前由四层 Guardian 做 ALLOW / FLAG / BLOCK。
                     decision = self.guardian.evaluate(call, ctx)
                     self.on_event("decision", {"call": call, "decision": decision})
                     if decision.action == Action.BLOCK:
@@ -107,6 +115,7 @@ class DeepSeekReActAgent:
 
                 output = execute_tool(call.name, call.input)
                 if call.name in UNTRUSTED_SOURCE_TOOLS:
+                    # 外部网页和文件内容进入模型上下文前登记污点，供后续 TaintLayer 判断。
                     register_tool_output_taint(ctx, call, output)
                 messages.append({
                     "role": "tool",

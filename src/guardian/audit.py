@@ -1,4 +1,9 @@
-"""Guardian 审计日志工具。"""
+"""Guardian 审计日志工具。
+
+CLI demo 和后续报告取证会用到这里的 JSONL。每一条记录都包含：
+原始用户请求、工具调用、上下文摘要、污点片段证据、四层 Verdict 和最终 Decision。
+这种结构方便后续把审计记录转成报告表格、攻击链说明或前端历史流。
+"""
 
 from __future__ import annotations
 
@@ -11,6 +16,7 @@ from .guardian import Context, Decision, ToolCall
 
 
 def decision_to_record(call: ToolCall, ctx: Context, decision: Decision, event: str = "tool_decision") -> dict[str, Any]:
+    """把一次 Guardian 决策序列化为可长期保存的审计事件。"""
     return {
         "ts": datetime.now(timezone.utc).isoformat(),
         "event": event,
@@ -51,6 +57,8 @@ def decision_to_record(call: ToolCall, ctx: Context, decision: Decision, event: 
 
 
 class JsonlAuditLogger:
+    """追加写 JSONL 审计日志；一行就是一次工具调用决策。"""
+
     def __init__(self, path: str | Path):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)

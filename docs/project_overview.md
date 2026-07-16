@@ -79,11 +79,46 @@ Guardian 四层防御：
 - `AnomalyLayer`：序列异常层。当前实现重复工具调用检测，后续可扩展为 n-gram 或 Markov 行为模型。
 - `adaptive_rules.py`：前端漏拦截分析写入的受限自适应规则。规则只做字段包含匹配，不执行代码。
 
+四层如何实际工作：
+
+1. `PolicyLayer` 是第一道确定性闸门。
+
+   输入是 `ToolCall` 和 `Context`。它先检查 DeepSeek 漏拦截分析写入的自适应规则，再检查工具白名单、危险 shell 模式、文件路径是否越出沙箱、是否读取敏感路径、是否把外部内容写入长期记忆、用户请求是否包含外联/删除数据库等工具劫持意图。对 DeepSeek 在线红队生成的样本，前端会把 `attack_goal`、`risk_points`、`danger_explanation`、`expected_guardian_action` 放入 `Context.metadata`，策略层会把这些元数据作为“红队样本期望阻断”的证据，避免当前工具调用看似正常但其实处在攻击链中的情况被放行。
+
+   这一层的特点是快、稳定、可解释，适合处理已知高危动作，例如 `rm -rf`、`curl | sh`、读取 `.env` / `id_rsa`、访问 `evil.example`、写入 `memory/profile.md` 等。它主要覆盖提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒和环境感知污染中的确定性风险。
+
+2. `TaintLayer` 解决间接提示注入和不可信数据流问题。
+
+   Agent 执行 `web_fetch` 或 `read_file` 后，工具输出会在进入模型上下文前被登记为不可信来源。系统不仅记录“来源级污点”，还会按行抽取“片段级污点”，为每个片段生成摘要 digest 和来源工具调用 ID。下一次模型想执行 `run_shell` 或 `write_file` 时，污点层会把当前工具参数展平，检查是否包含先前的不可信片段，或者是否在读取不可信内容之后触发高权限动作。
+
+   如果不可信片段中出现 `ignore previous instructions`、`curl | sh`、`rm -rf`、密钥处理等危险 sink，并流入高权限动作，就直接 `BLOCK`。如果只是发现不可信文本被复制进高权限动作但危险意图不明显，则 `FLAG`。这使项目能够解释“网页里藏的提示词如何一步步影响工具调用”，是防御间接提示注入、环境污染和记忆中毒的关键。
+
+3. `IntentLayer` 用 LLM judge 做语义层校验。
+
+   策略层和污点层更擅长识别明确规则和数据流，但有些工具调用本身不一定包含危险关键词，却与用户原始意图不一致。`IntentLayer` 会把 `user_request` 和当前 `ToolCall` 组织成 JSON，让 `DeepSeekIntentJudge` 判断工具调用是否符合用户真实请求，并返回 `consistent`、`reason`、`confidence`。如果 judge 认为不一致，高影响工具如 `run_shell`、`write_file` 会被 `BLOCK`，读文件等中风险工具会被 `FLAG`。
+
+   这一层默认不启用，保证离线验收不依赖 API Key；在 Dashboard 中勾选“同时启用 DeepSeek intent judge”后才会在线调用。它适合展示“语义不一致”的攻击，例如用户只要求总结网页，模型却试图执行删除命令或写入长期规则。
+
+4. `AnomalyLayer` 做工具调用序列层面的异常检测。
+
+   前三层主要看“当前这一次调用是否危险”，而异常层看“这次调用放在历史序列里是否反常”。当前 v1 使用轻量启发式：如果同一个工具在最近调用中连续重复超过阈值，就 `FLAG` 为疑似异常循环。虽然它还不是完整行为模型，但已经把序列异常层的接口和数据流跑通，后续可以替换为 n-gram、Markov 或基于良性轨迹训练的异常分数模型。
+
+   这一层的价值在于处理单次调用看似正常、但调用序列异常的智能体行为，例如重复抓取、重复写文件、循环执行工具、突然从低风险查询跳到高风险执行等。
+
+四层之间不是互相替代，而是互补：
+
+- `PolicyLayer` 处理已知危险模式，保证基础安全底线。
+- `TaintLayer` 追踪不可信来源如何影响高权限动作，解决间接攻击链。
+- `IntentLayer` 用语义判断补足规则无法覆盖的意图漂移。
+- `AnomalyLayer` 从时间序列角度发现异常行为模式。
+
 决策逻辑：
 
 - 任一层 `BLOCK`，最终阻断。
 - 无 `BLOCK` 但有 `FLAG`，最终告警。
 - 全部 `ALLOW`，最终放行。
+
+最终 `Decision` 会保留每一层的 `Verdict`，前端 Dashboard 的“总 / 1 / 2 / 3 / 4”就是把总决策和四层 Verdict 展示出来，方便演示为什么拦截、由哪一层拦截、证据是什么。
 
 ### 3.3 红队样本与测试集
 
@@ -159,6 +194,22 @@ Guardian 四层防御：
 - `eval_results.md`：自动生成的评测结果。
 - `COMMIT_SUMMARY.md`：阶段 commit 汇总。
 
+### 3.5 核心代码注释导航
+
+为了方便答辩和后续小组协作，核心代码已经补充块级注释，建议按下面顺序阅读：
+
+- `src/guardian/guardian.py`：解释 `ToolCall -> Context -> Verdict -> Decision` 的统一数据流。
+- `src/guardian/policy.py`：解释策略层规则组、执行顺序和 DeepSeek 红队元数据兜底。
+- `src/guardian/taint.py`：解释来源级污点、片段级污点和高权限 sink 判断。
+- `src/guardian/intent.py`：解释 DeepSeek intent judge 的结构化输入输出和风险分级。
+- `src/guardian/anomaly.py`：解释当前重复调用启发式，以及后续序列模型替换点。
+- `src/guardian/adaptive_rules.py`：解释漏拦截分析生成的受限数据规则为何不会执行模型代码。
+- `src/agent/deepseek_agent.py`：解释 Guardian 如何嵌入到 LLM tool calling 执行前。
+- `src/agent/tools.py`：解释真实工具执行、沙箱、fixture 离线网页和不可信来源。
+- `src/redteam/surface_lab.py`：解释 7 个攻击面、离线样本和 DeepSeek 在线样本如何统一成 `AttackCase`。
+- `scripts/dashboard_server.py`：解释网页前后端共用的本地服务、批量红队、漏拦截分析和 SQLite 历史流。
+- `dashboard/app.js`：解释前端状态、批量矩阵、“总 / 1 / 2 / 3 / 4”展示和漏拦截闭环。
+
 ## 4. 已达成的课程交付物
 
 | 课程要求 | 当前状态 | 对应文件 |
@@ -193,7 +244,7 @@ cd E:\eve_jump\暑期课程\Argus
 当前验证结果：
 
 ```text
-51 passed in 1.52s
+54 passed
 ```
 
 ### 5.3 跑离线原型演示

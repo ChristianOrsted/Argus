@@ -1,3 +1,6 @@
+// Dashboard 前端状态：所有页面渲染都从这里取数据，避免多个区域各自维护副本。
+// `data` 是离线基准和攻击面配置；`history` 是 SQLite 历史流；`batchResults`
+// 是 DeepSeek 批量红队生成后逐条审计的结果。
 const state = {
   data: null,
   selectedCaseId: null,
@@ -12,6 +15,8 @@ const state = {
 };
 
 const el = (id) => document.getElementById(id);
+
+// 四层 Guardian 的展示顺序，对应页面矩阵中的 1 / 2 / 3 / 4。
 const LAYER_ORDER = ["policy", "taint", "intent", "anomaly"];
 
 function fmtPercent(value) {
@@ -58,6 +63,8 @@ function isExpectedBlock(result) {
 }
 
 function isMissed(result) {
+  // DeepSeek 红队样本自带 expected_guardian_action。若样本期望拦截但 Guardian 放行，
+  // 页面把“总”状态标为红色漏拦截，方便继续调用 DeepSeek 分析并同步规则。
   return isExpectedBlock(result) && ((result.decision || {}).action === "allow");
 }
 
@@ -70,6 +77,7 @@ function statusDot(action, title = "") {
 }
 
 async function api(path, options = {}) {
+  // 统一 API 调用和错误解包；后端返回 JSON error 时，前端直接显示可读错误。
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -285,6 +293,8 @@ function shortTool(result) {
 }
 
 function renderBatchMatrix() {
+  // 批量矩阵是演示核心：左侧是攻击条目信息，右侧依次是总状态和四层状态。
+  // 点击行会把该条 DeepSeek 原始 JSON 与 Guardian Verdict 展开到详情区。
   const matrix = el("batchMatrix");
   if (!state.batchResults.length) {
     matrix.innerHTML = `<div class="empty-state">尚未生成批量攻击条目</div>`;
@@ -325,6 +335,7 @@ function renderBatchMatrix() {
 }
 
 function selectBatchItem(index) {
+  // 选中某个批量攻击条目后，同步刷新右侧详情和下方通用审计面板。
   const result = state.batchResults[index];
   if (!result) {
     return;
@@ -398,6 +409,8 @@ async function rerunSurface(surfaceId) {
 }
 
 async function runDeepSeekRedTeam(surfaceId) {
+  // 网页端在线红队入口：按攻击面和提示词调用后端批量接口。
+  // 后端只把生成出的 ToolCall 交给 Guardian 审计，不会真实执行危险工具。
   const selectedSurface = surfaceId || el("deepseekSurface").value;
   el("deepseekSurface").value = selectedSurface;
   if (surfaceId) {
@@ -434,6 +447,7 @@ async function runDeepSeekRedTeam(surfaceId) {
 }
 
 async function analyzeMiss(index) {
+  // 漏拦截闭环：把未被阻断的条目交给 DeepSeek 分析，生成受限自适应规则后重评估。
   const result = state.batchResults[index];
   if (!result) {
     return;

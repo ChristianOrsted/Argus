@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 from ..config import FIXTURE_DIR, SANDBOX_DIR
 
 # ---- 给 Claude 的工具 schema（messages.create 的 tools 参数）----
+# 这些 schema 描述 Agent 能“提出”的工具调用；是否真正执行由 Guardian 决定。
 TOOLS = [
     {
         "name": "run_shell",
@@ -73,8 +74,13 @@ UNTRUSTED_SOURCE_TOOLS = {"web_fetch", "read_file"}
 
 
 def execute_tool(name: str, tool_input: dict) -> str:
-    """真正执行工具。注意：调用方应在 Guardian 放行后才调用本函数。"""
+    """真正执行工具。注意：调用方应在 Guardian 放行后才调用本函数。
+
+    工具执行层尽量保持简单真实：shell 会在沙箱目录运行，文件读写限制在沙箱路径，
+    `fixture://` 用于离线复现间接提示注入，真实 http(s) 抓取用于在线演示。
+    """
     if name == "run_shell":
+        # 高危工具：命令执行能力最强，所以 Policy/Taint/Intent 都会重点审计它。
         proc = subprocess.run(
             tool_input["command"], shell=True, capture_output=True, text=True,
             cwd=SANDBOX_DIR, timeout=30,
@@ -94,6 +100,7 @@ def execute_tool(name: str, tool_input: dict) -> str:
     if name == "web_fetch":
         url = str(tool_input["url"])
         if url.startswith("fixture://"):
+            # 离线 fixture 让课程演示不依赖真实恶意网页，也便于稳定测试。
             fixture_name = url.removeprefix("fixture://").lstrip("/\\")
             p = (FIXTURE_DIR / fixture_name).resolve()
             if not p.is_relative_to(FIXTURE_DIR.resolve()):

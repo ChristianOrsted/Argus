@@ -1,6 +1,13 @@
 """Argus Dashboard 本地服务。
 
-只使用 Python 标准库：提供静态前端和 Guardian 评估 API。
+这个脚本是可演示原型系统的入口：一个 Python 进程同时承担前端静态文件服务和
+后端 Guardian API。前端所有操作最终都会落到这里：
+
+- 离线样本评估：把预置 AttackCase 交给 Guardian；
+- 自定义工具调用评估：把用户输入组装成 ToolCall；
+- DeepSeek 在线红队：生成攻击样本后再交给 Guardian 审计；
+- 漏拦截分析：让 DeepSeek 建议受限自适应规则，并重评估；
+- 历史流：把每次审计结果写入 SQLite，供前端统计和回放。
 """
 
 from __future__ import annotations
@@ -39,6 +46,7 @@ HISTORY_DB = ROOT / "sandbox_runs" / "audit" / "dashboard_history.sqlite3"
 
 
 def _case_context(case: AttackCase, metadata: dict | None = None) -> Context:
+    """把红队样本转换为四层 Guardian 所需的 Context。"""
     return Context(
         user_request=case.user_request,
         history=list(case.history),
@@ -69,6 +77,7 @@ def serialize_case(case: AttackCase) -> dict:
 
 
 def serialize_decision(decision) -> dict:
+    """把 Guardian Decision 转成前端可直接渲染的 JSON。"""
     return {
         "action": decision.action.value,
         "reason": decision.reason,
@@ -86,6 +95,7 @@ def serialize_decision(decision) -> dict:
 
 
 def _history_connect(db_path: Path = HISTORY_DB) -> sqlite3.Connection:
+    """打开历史库并确保表结构存在。"""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.execute(
@@ -123,6 +133,7 @@ def _history_payload(mode: str, result: dict) -> dict:
 
 
 def record_history(mode: str, result: dict, db_path: Path = HISTORY_DB) -> None:
+    """把一次 Dashboard 审计写入 SQLite 历史流。"""
     payload = _history_payload(mode, result)
     case = payload.get("case") or {}
     surface = payload.get("surface") or {}
@@ -173,6 +184,7 @@ def _row_to_history_entry(row: sqlite3.Row) -> dict:
 
 
 def summarize_history(entries: list[dict]) -> dict:
+    """汇总历史审计，用于前端指标卡和四层防御统计。"""
     actions = {"allow": 0, "flag": 0, "block": 0}
     layers: dict[str, dict[str, int]] = {}
     categories: dict[str, int] = {}
@@ -229,6 +241,7 @@ def clear_history(db_path: Path = HISTORY_DB) -> None:
 
 
 def normalize_tainted_sources(raw) -> set[str]:
+    """规范化前端传来的污点来源，兼容字符串和数组两种输入。"""
     if isinstance(raw, str):
         return {raw} if raw else set()
     if isinstance(raw, list):
@@ -237,6 +250,7 @@ def normalize_tainted_sources(raw) -> set[str]:
 
 
 def resolve_static_path(request_path: str) -> Path | None:
+    """解析静态文件路径，并防止通过 URL 目录穿越读取 dashboard 外文件。"""
     rel = unquote(request_path).lstrip("/")
     if not rel:
         rel = "index.html"
@@ -249,6 +263,7 @@ def resolve_static_path(request_path: str) -> Path | None:
 
 
 def evaluate_case(case: AttackCase, guardian=None, metadata: dict | None = None) -> dict:
+    """评估一个离线或在线红队样本，并返回前端所需的完整审计结果。"""
     guardian = guardian or build_default_guardian()
     ctx = _case_context(case, metadata=metadata)
     start = perf_counter()
@@ -267,6 +282,7 @@ def evaluate_case(case: AttackCase, guardian=None, metadata: dict | None = None)
 
 
 def evaluate_surface(surface_id: str) -> dict:
+    """运行某个攻击面的确定性离线样本，保证无 API Key 也能演示。"""
     surface = get_attack_surface(surface_id)
     result = evaluate_case(surface.offline_case)
     return {
@@ -284,6 +300,7 @@ def _generator_generate(generator, surface, prompt_override: str = "") -> dict:
 
 
 def _evaluate_generated_attack(surface, generated: dict, api_key: str = "", use_intent_judge: bool = False) -> dict:
+    """把 DeepSeek 生成样本转成 AttackCase，并带着红队元数据进入 Guardian。"""
     case = generated_attack_to_case(surface, generated)
     intent_client = DeepSeekIntentJudge(api_key=api_key or DEEPSEEK_API_KEY) if use_intent_judge else None
     metadata = {
@@ -305,6 +322,7 @@ def _evaluate_generated_attack(surface, generated: dict, api_key: str = "", use_
 
 
 def run_deepseek_redteam(payload: dict, generator=None) -> dict:
+    """运行单条 DeepSeek 在线红队样本。保留该接口用于兼容早期前端。"""
     surface = get_attack_surface(str(payload.get("surface_id", "")))
     api_key = str(payload.get("api_key") or "")
     use_intent_judge = bool(payload.get("use_intent_judge"))
@@ -315,6 +333,7 @@ def run_deepseek_redteam(payload: dict, generator=None) -> dict:
 
 
 def run_deepseek_batch(payload: dict, generator=None) -> dict:
+    """批量生成 DeepSeek 红队样本并逐条审计，供前端矩阵展示。"""
     surface = get_attack_surface(str(payload.get("surface_id", "")))
     api_key = str(payload.get("api_key") or "")
     count = max(1, min(int(payload.get("count") or 1), 8))
@@ -344,6 +363,7 @@ def run_deepseek_batch(payload: dict, generator=None) -> dict:
 
 
 def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
+    """分析漏拦截、写入受限自适应规则，并对同一攻击重评估。"""
     result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
     surface_id = str(payload.get("surface_id") or (result.get("surface") or {}).get("id") or "")
     surface = get_attack_surface(surface_id)
@@ -367,6 +387,7 @@ def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
 
 
 def evaluate_custom(payload: dict) -> dict:
+    """评估前端手工输入的任意 ToolCall，便于课堂现场复现实验。"""
     call = ToolCall(
         name=str(payload.get("tool_name") or payload.get("name") or "run_shell"),
         input=payload.get("input") if isinstance(payload.get("input"), dict) else {},

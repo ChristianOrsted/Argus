@@ -1,6 +1,11 @@
 """第 1 层 · 策略 / 沙箱。
 
-确定性规则，最快最可靠。先把这一层跑通就能演示拦截效果。
+PolicyLayer 是四层中的“硬规则底线”。它不依赖模型判断，直接用确定性规则处理
+已知高危行为：危险 shell、未知工具、沙箱外文件访问、敏感凭据读取、可疑 URL、
+记忆中毒写入和 DeepSeek 红队元数据标记的攻击链候选动作。
+
+本层适合做实时阻断，因为速度快、可解释、误差可控。后续红队发现新绕过时，
+优先把稳定、明确、低误报的模式固化到这里。
 """
 
 from __future__ import annotations
@@ -14,10 +19,10 @@ from .guardian import Action, Context, ToolCall, Verdict
 
 NAME = "policy"
 
-# 允许 Agent 使用的工具白名单
+# 允许 Agent 使用的工具白名单；不在白名单中的工具会在真实执行前直接 BLOCK。
 ALLOWED_TOOLS = {"run_shell", "read_file", "write_file", "web_fetch"}
 
-# 危险 shell 命令模式（命中即拦截）。这是初版，红队会不断扩充对抗样本来逼我们完善。
+# 危险 shell 命令模式（命中即拦截）。这些模式代表破坏、反弹 shell、下载执行和凭据读取。
 DANGEROUS_PATTERNS = [
     (re.compile(r"\brm\s+-rf\b"), "递归强制删除"),
     (re.compile(r":\(\)\s*\{.*\};\s*:"), "fork 炸弹"),
@@ -31,6 +36,7 @@ DANGEROUS_PATTERNS = [
     (re.compile(r"\becho\b.*\$(API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b", re.I), "回显敏感环境变量"),
 ]
 
+# 下列规则组按攻击面拆分，方便答辩时解释“为什么这类输入会被认为危险”。
 MEMORY_PATH_HINTS = ("memory", "profile", "system_prompt", "instructions")
 INSTRUCTION_PATH_HINTS = MEMORY_PATH_HINTS + ("plan", "plans", "config", "policy")
 PROMPT_INJECTION_PATTERNS = [
@@ -86,6 +92,7 @@ def _looks_like_suspicious_url(url: str) -> str:
 
 
 def _flatten_input(value) -> str:
+    """把嵌套工具参数压成文本，供策略规则做统一匹配。"""
     if isinstance(value, dict):
         return " ".join(_flatten_input(v) for v in value.values())
     if isinstance(value, (list, tuple, set)):
@@ -94,6 +101,7 @@ def _flatten_input(value) -> str:
 
 
 def _shell_payload(tool_input: dict) -> str:
+    """提取 shell 载荷，兼容 DeepSeek 可能生成的 cmd/script/code 等参数名。"""
     for key in ("command", "cmd", "script", "code", "shell"):
         if key in tool_input:
             return str(tool_input.get(key, ""))
@@ -130,6 +138,12 @@ def _mentions_exfiltration_or_hijack(text: str) -> bool:
 
 
 def _redteam_metadata_requires_block(ctx: Context) -> bool:
+    """判断 DeepSeek 红队元数据是否已经足以证明该样本应阻断。
+
+    有些在线生成样本当前工具只是 `web_fetch`，单看工具名并不危险；
+    但 `risk_points` / `danger_explanation` 已经说明后续会诱导外联、删除数据库或
+    非白名单调用。这里把这类“攻击链候选动作”提前阻断，避免演示时全绿放行。
+    """
     if not ctx.metadata:
         return False
     expected = str(ctx.metadata.get("expected_guardian_action", "")).lower()
@@ -149,6 +163,11 @@ class PolicyLayer:
     name = NAME
 
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
+        """按“自适应规则 -> 白名单 -> 用户意图关键字 -> 红队元数据 -> 工具细则”的顺序检查。
+
+        顺序很重要：自适应规则代表最近红队反馈；白名单是最基础边界；
+        后面的规则再针对 shell、web、文件和记忆写入做细分。
+        """
         adaptive = first_matching_adaptive_rule(call, ctx)
         if adaptive:
             return Verdict(NAME, Action.BLOCK, f"命中自适应防御规则：{adaptive.get('description')}")
@@ -163,7 +182,7 @@ class PolicyLayer:
         if _redteam_metadata_requires_block(ctx):
             return Verdict(NAME, Action.BLOCK, "DeepSeek 红队元数据标记该样本期望阻断，当前工具调用属于攻击链候选动作")
 
-        # shell 危险命令
+        # shell 危险命令：模型越狱和直接提示注入最常把风险落到 run_shell。
         if call.name == "run_shell":
             cmd = _shell_payload(call.input)
             for pattern, desc in DANGEROUS_PATTERNS:
@@ -177,7 +196,7 @@ class PolicyLayer:
             if _mentions_external_memory_write(ctx.user_request):
                 return Verdict(NAME, Action.BLOCK, "疑似记忆中毒链路：读取外部内容并写入长期记忆")
 
-        # 文件路径沙箱限定
+        # 文件路径沙箱限定：训练数据泄露、凭据读取和目录穿越会在这里被拦截。
         if call.name in {"read_file", "write_file"}:
             path = _path_payload(call.input)
             if not _is_within_sandbox(path):

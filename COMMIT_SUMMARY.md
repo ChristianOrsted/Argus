@@ -346,3 +346,22 @@ Validation:
 
 - Documentation-only change.
 - Secret scan passed: no real API key was written to tracked files.
+
+## Stage 16 - Four-layer explanation and code comments
+
+Commit message: `docs: explain guardian layers and annotate code`
+
+Completed scope:
+
+- Expand `docs/project_overview.md` with a deeper explanation of how Policy, Taint, Intent, and Anomaly layers work.
+- Add a code-comment navigation section to `project_overview` for the main Guardian, Agent, red-team, Dashboard, and frontend files.
+- Add explanatory block comments and docstrings to the four Guardian layers and shared data flow.
+- Annotate the Agent tool-calling checkpoint, tool execution layer, red-team attack-surface lab, dashboard API service, audit logging, and frontend batch matrix.
+- Keep comments focused on code-block responsibilities and project architecture rather than line-by-line noise.
+
+Validation:
+
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed.
+- `node --check dashboard\app.js` passed.
+- Secret scan passed: no real API key was written to tracked files.

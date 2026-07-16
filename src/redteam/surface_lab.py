@@ -1,11 +1,12 @@
-"""Attack-surface lab for Dashboard demos.
+"""Dashboard 攻击面实验台。
 
-This module keeps two paths side by side:
+本模块把课程题目中的攻击面整理成可演示的结构化配置，并同时提供两条路径：
 
-- deterministic offline replay for stable acceptance;
-- DeepSeek-generated red-team cases for live LLM participation.
+- 离线重跑：每个攻击面有稳定的预置 `AttackCase`，适合验收和测试；
+- DeepSeek 在线红队：模型按同一攻击面生成新的攻击请求、工具调用和风险说明。
 
-Generated cases are evaluated by Guardian only. They are not executed.
+无论离线还是在线，最终都会被转换成同一种 `AttackCase` / `ToolCall`，只进入
+Guardian 审计，不会真实执行 DeepSeek 生成的危险工具。
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from .attacks import AttackCase
 
 @dataclass(frozen=True)
 class AttackSurfaceSpec:
+    """单个攻击面的演示配置。"""
+
     id: str
     title: str
     category: str
@@ -51,6 +54,7 @@ def _case(
     )
 
 
+# 七个攻击面与课程题目保持一一对应；每项都包含离线样本和在线红队提示词。
 ATTACK_SURFACES: list[AttackSurfaceSpec] = [
     AttackSurfaceSpec(
         id="prompt_injection",
@@ -243,7 +247,11 @@ def _list_of_strings(value: Any) -> list[str]:
 
 
 def coerce_deepseek_attack(raw: dict[str, Any], surface: AttackSurfaceSpec) -> dict[str, Any]:
-    """Normalize a model-generated attack case into a Guardian-ready payload."""
+    """把模型生成的 JSON 规整为 Guardian 可审计的攻击样本。
+
+    DeepSeek 输出可能漏字段、工具名越界或参数格式不稳定；这里统一补默认值、
+    限制工具集合、补污点来源，并保留 raw_model_output 便于前端展开审计。
+    """
 
     tool = raw.get("tool_call") if isinstance(raw.get("tool_call"), dict) else {}
     name = str(tool.get("name") or surface.offline_case.tool_call.name)
@@ -276,7 +284,7 @@ def coerce_deepseek_attack(raw: dict[str, Any], surface: AttackSurfaceSpec) -> d
 
 
 class DeepSeekRedTeamGenerator:
-    """Generate one attack-surface case through DeepSeek chat completions."""
+    """调用 DeepSeek 生成一个攻击面样本。"""
 
     def __init__(
         self,
@@ -292,6 +300,7 @@ class DeepSeekRedTeamGenerator:
         if not self.api_key:
             raise RuntimeError("缺少 DEEPSEEK_API_KEY，无法运行 DeepSeek 红队生成")
 
+        # 提示词以结构化 JSON 传入，要求模型只返回 JSON，便于后续自动审计。
         task = prompt_override.strip() or surface.prompt
         payload = {
             "model": self.model,
@@ -352,6 +361,7 @@ class DeepSeekRedTeamGenerator:
 
 
 def coerce_defense_analysis(raw: dict[str, Any], surface: AttackSurfaceSpec, generated: dict[str, Any]) -> dict[str, Any]:
+    """把 DeepSeek 的漏拦截分析结果规整为受限自适应规则。"""
     rules = raw.get("suggested_rules") if isinstance(raw.get("suggested_rules"), list) else []
     cleaned_rules = []
     for rule in rules[:6]:
@@ -377,7 +387,7 @@ def coerce_defense_analysis(raw: dict[str, Any], surface: AttackSurfaceSpec, gen
 
 
 class DeepSeekDefenseAnalyzer:
-    """Ask DeepSeek to explain a missed detection and propose constrained rules."""
+    """让 DeepSeek 分析漏拦截原因，并只允许它建议受限数据规则。"""
 
     def __init__(
         self,
@@ -450,6 +460,7 @@ class DeepSeekDefenseAnalyzer:
 
 
 def generated_attack_to_case(surface: AttackSurfaceSpec, generated: dict[str, Any]) -> AttackCase:
+    """把在线生成样本转换成与离线红队集一致的 `AttackCase`。"""
     tool_call = generated.get("tool_call") if isinstance(generated.get("tool_call"), dict) else {}
     call = ToolCall(
         name=str(tool_call.get("name") or surface.offline_case.tool_call.name),

@@ -21,7 +21,11 @@ HIGH_IMPACT_TOOLS = {"run_shell", "write_file"}
 
 
 class DeepSeekIntentJudge:
-    """DeepSeek/OpenAI-compatible JSON judge。"""
+    """DeepSeek/OpenAI-compatible JSON judge。
+
+    这个类只负责“问模型判断意图是否一致”，不直接决定放行或阻断。
+    真正的安全动作由 `IntentLayer.check` 根据工具影响级别决定。
+    """
 
     def __init__(
         self,
@@ -37,6 +41,7 @@ class DeepSeekIntentJudge:
         if not self.api_key:
             raise RuntimeError("缺少 DEEPSEEK_API_KEY，无法启用 intent judge")
 
+        # judge 输入保持结构化，避免把安全判断变成难解析的自然语言回答。
         prompt = {
             "user_request": user_request,
             "tool_call": {"name": call.name, "input": call.input},
@@ -70,6 +75,7 @@ class DeepSeekIntentJudge:
 
 
 def _coerce_judge_result(raw: Any) -> tuple[bool, str, float]:
+    """把模型或测试 fake 返回值规范化为 `(一致?, 原因, 置信度)`。"""
     if isinstance(raw, str):
         raw = json.loads(raw)
     if not isinstance(raw, dict):
@@ -92,6 +98,11 @@ class IntentLayer:
         self.model = model
 
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
+        """判断当前工具调用是否偏离用户最初意图。
+
+        本层只审高价值工具，避免每个低风险动作都调用在线模型。
+        当 judge 认为意图不一致时，高影响工具直接 BLOCK，中风险工具 FLAG。
+        """
         if call.name not in JUDGED_TOOLS:
             return Verdict(NAME, Action.ALLOW, "低风险工具跳过 intent judge", confidence=1.0)
 

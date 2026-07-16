@@ -1,8 +1,11 @@
-"""Runtime adaptive block rules for dashboard-driven hardening.
+"""Dashboard 驱动的运行时自适应防御规则。
 
-Rules are deliberately constrained data, not executable code. DeepSeek can
-suggest them through the dashboard, but PolicyLayer only applies simple
-case-insensitive substring matches over known fields.
+DeepSeek 可以在“分析漏拦截”时建议新规则，但这里故意只接受受限数据规则：
+`tool_name`、`surface_id`、`*_contains_any` 等字段。PolicyLayer 只做大小写不敏感
+的包含匹配，不执行模型生成的代码，也不接受正则或任意表达式。
+
+这让项目可以演示“红队发现绕过 -> 蓝队分析原因 -> 同步防御规则 -> 重评估”的闭环，
+同时避免把 LLM 生成内容直接变成可执行安全策略。
 """
 
 from __future__ import annotations
@@ -56,6 +59,7 @@ def _terms(value: Any) -> list[str]:
 
 
 def sanitize_rule(raw: dict[str, Any]) -> dict[str, Any]:
+    """把外部输入规则压缩成安全、可审计、可去重的固定格式。"""
     rule = {
         "description": str(raw.get("description") or raw.get("reason") or "adaptive dashboard rule")[:240],
         "action": "block",
@@ -93,6 +97,7 @@ def save_adaptive_rules(rules: list[dict[str, Any]], path: Path = ADAPTIVE_RULES
 
 
 def append_adaptive_rules(raw_rules: list[dict[str, Any]], path: Path = ADAPTIVE_RULES_PATH) -> list[dict[str, Any]]:
+    """追加规则并按 id 去重；没有任何匹配字段的规则会被丢弃。"""
     existing = load_adaptive_rules(path)
     by_id = {rule["id"]: rule for rule in existing}
     for raw in raw_rules:
@@ -112,6 +117,7 @@ def _any_term_matches(terms: list[str], haystack: str) -> bool:
 
 
 def match_adaptive_rule(rule: dict[str, Any], call: ToolCall, ctx: Context) -> bool:
+    """判断单条受限规则是否命中当前工具调用和上下文。"""
     tool_name = rule.get("tool_name")
     if tool_name and tool_name != call.name:
         return False

@@ -1,5 +1,22 @@
 # Argus Update Log
 
+## 2026-07-16 - Four-Layer Explanation And Code Comments
+
+本次新增文档和注释：
+
+- 深入扩写 `docs/project_overview.md` 中 Guardian 四层模块的实现说明，不再只写概述作用，而是解释每层输入、判断逻辑、输出结果、覆盖攻击面和当前边界。
+- 新增 `project_overview` 的“核心代码注释导航”，说明答辩和小组协作时应如何阅读核心代码。
+- 补充四层核心代码注释：`guardian.py`、`policy.py`、`taint.py`、`intent.py`、`anomaly.py`、`adaptive_rules.py`。
+- 补充 Agent 和工具执行代码注释：`deepseek_agent.py`、`tools.py`。
+- 补充红队实验台、Dashboard 服务、审计日志和前端批量矩阵注释：`surface_lab.py`、`dashboard_server.py`、`audit.py`、`dashboard/app.js`。
+
+本次验证结果：
+
+- 代码注释为说明性改动，不改变业务逻辑。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：54 passed。
+- 前端 JS 语法检查通过：`node --check dashboard\app.js`。
+
 ## 2026-07-16 - Operation Guide And Topic-Aligned Self Audit
 
 本次新增文档：

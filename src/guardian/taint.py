@@ -37,6 +37,7 @@ MAX_FRAGMENTS_PER_OUTPUT = 12
 
 
 def _flatten_input(value) -> str:
+    """把任意工具参数展平为文本，便于与不可信片段做包含匹配。"""
     if isinstance(value, dict):
         return " ".join(_flatten_input(v) for v in value.values())
     if isinstance(value, (list, tuple, set)):
@@ -61,6 +62,8 @@ def extract_tainted_fragments(
 
     v1 采用可解释的片段策略：按非空行切分，优先保留命中危险 sink 的行，
     同时保留少量普通长行，方便后续识别“外部文本被复制进高权限动作”的数据流。
+    这里没有直接做复杂语义匹配，是为了让审计证据能在前端和报告里清晰解释：
+    “哪个来源的哪段文本流入了哪个工具参数”。
     """
 
     candidates: list[str] = []
@@ -125,10 +128,17 @@ class TaintLayer:
     name = NAME
 
     def check(self, call: ToolCall, ctx: Context) -> Verdict:
+        """检查不可信来源是否影响当前高权限动作。
+
+        本层先看来源级污点：只要读取过网页/文件等不可信来源，再触发 shell 或写文件，
+        就进入高风险审查。随后再看片段级污点：如果具体不可信片段出现在工具参数里，
+        就能给出 digest 和来源作为证据。这样既能抓住间接提示注入，也能说明拦截原因。
+        """
         if ctx.tainted_sources and call.name in HIGH_PRIVILEGE_TOOLS:
             payload = _flatten_input(call.input)
             write_path = str(call.input.get("path", "")).lower() if call.name == "write_file" else ""
 
+            # 片段级证据：外部网页/文件中的文本被模型复制进当前高权限工具参数。
             fragment_matches = [
                 fragment for fragment in ctx.tainted_fragments
                 if _fragment_matches_payload(fragment, payload)
@@ -149,6 +159,7 @@ class TaintLayer:
                     confidence=0.7,
                 )
 
+            # 来源级证据：没有看到具体片段复制，但调用发生在不可信读取之后，仍需保守处理。
             desc = _dangerous_text(payload)
             if desc:
                 return Verdict(
