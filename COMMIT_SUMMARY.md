@@ -489,3 +489,29 @@ Validation:
 
 - `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` completed successfully and generated a 13-page PDF.
 - Secret scan passed: no real API key was written to tracked files.
+
+## Stage 22 - Final presentation deck
+
+Commit message: `docs: add final presentation deck`
+
+Completed scope:
+
+- Add `report/llm_security_argus_briefing.pptx` as a concise 9-slide course briefing deck.
+- Structure the deck around the selected topic:
+  - research problem and attack surfaces,
+  - completed deliverables,
+  - Argus Guardian architecture,
+  - four-layer behavior supervision mechanism,
+  - red-team samples and DeepSeek online attack workflow,
+  - quantified evaluation results,
+  - Dashboard demo and acceptance flow,
+  - limitations and future work.
+- Include final evaluation metrics in the deck: 30 total cases, 22 attacks, 22/22 detected, 0 blocking false positives, 1.049ms average audit latency.
+- Add future-work discussion for public attack-set integration and tool-set scaling beyond fixed presets.
+- Update `docs/project_overview.md` and `docs/update_log.md` to register the PPT deliverable.
+
+Validation:
+
+- Generated the PPTX with `@oai/artifact-tool`.
+- Rendered the final PPTX to slide images and inspected all 9 slides.
+- `slides_test.py` passed with no overflow detected.

@@ -1,5 +1,16 @@
 # Argus Update Log
 
+## 2026-07-17 - Final Presentation Deck
+
+本次新增汇报材料：
+
+- 新增 `report/llm_security_argus_briefing.pptx` 作为课程汇报 PPT。
+- PPT 共 9 页，结构为：选题与研究问题、攻击面、项目交付物、系统架构、四层 Guardian 机制、红队与 DeepSeek 在线样本、实验结果、网页演示验收、局限与展望。
+- 实验结果页写入当前定稿口径：30 条样本、22 条攻击样本、22/22 攻击检出、0 阻断型误报、平均审计延迟 1.049ms。
+- 展望页补充后续可深入方向：接入 AdvBench/JailbreakBench 等现有攻击集扩大测试，工具集超出预设时升级为工具能力标签、最小权限和场景策略。
+- 已使用演示文稿工具渲染最终 PPTX 并逐页检查；`slides_test.py` 检查通过，无元素越界。
+- 更新 `docs/project_overview.md`，将 PPT 标记为汇报交付物。
+
 ## 2026-07-16 - Final LaTeX Report
 
 本次定稿文档更新：
