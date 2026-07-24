@@ -6,8 +6,13 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 
+from ..agent.tool_security import (
+    ToolSecurityError,
+    parse_safe_shell_command,
+    resolve_confined_path,
+    validate_web_url,
+)
 from ..config import SANDBOX_DIR
 from .adaptive_rules import first_matching_adaptive_rule
 from .guardian import Action, Context, ToolCall, Verdict
@@ -62,12 +67,11 @@ REDTEAM_METADATA_PATTERNS = [
 
 
 def _is_within_sandbox(path_str: str) -> bool:
-    """文件路径是否落在沙箱目录内（防目录穿越）。"""
+    """文件路径是否为不含链接组件的沙箱内相对路径。"""
     try:
-        resolved = (SANDBOX_DIR / path_str).resolve() if not Path(path_str).is_absolute() \
-            else Path(path_str).resolve()
-        return resolved.is_relative_to(SANDBOX_DIR)
-    except (ValueError, OSError):
+        resolve_confined_path(path_str, root=SANDBOX_DIR)
+        return True
+    except (ToolSecurityError, OSError):
         return False
 
 
@@ -169,11 +173,19 @@ class PolicyLayer:
             for pattern, desc in DANGEROUS_PATTERNS:
                 if pattern.search(cmd):
                     return Verdict(NAME, Action.BLOCK, f"危险命令：{desc}")
+            try:
+                parse_safe_shell_command(call.input.get("command"))
+            except ToolSecurityError as exc:
+                return Verdict(NAME, Action.BLOCK, f"命令越出能力沙箱：{exc}")
 
         if call.name == "web_fetch":
             url = _url_payload(call.input)
             if _looks_like_suspicious_url(url):
                 return Verdict(NAME, Action.BLOCK, f"访问已知红队/外联可疑 URL：{url}")
+            try:
+                validate_web_url(url)
+            except ToolSecurityError as exc:
+                return Verdict(NAME, Action.BLOCK, f"不安全 URL：{exc}")
             if _mentions_external_memory_write(ctx.user_request):
                 return Verdict(NAME, Action.BLOCK, "疑似记忆中毒链路：读取外部内容并写入长期记忆")
 

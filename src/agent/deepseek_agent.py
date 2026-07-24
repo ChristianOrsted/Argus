@@ -14,6 +14,7 @@ from urllib.request import Request, urlopen
 from ..config import AGENT_MODEL, DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL
 from ..guardian.guardian import Action, Context, Guardian, ToolCall
 from ..guardian.taint import register_tool_output_taint
+from .tool_security import ToolSecurityError
 from .tools import OPENAI_TOOLS, UNTRUSTED_SOURCE_TOOLS, execute_tool
 
 DEFAULT_SYSTEM = "You are a helpful assistant with access to shell, file, and web tools."
@@ -105,8 +106,14 @@ class DeepSeekReActAgent:
                         ctx.history.append(call)
                         continue
 
-                output = execute_tool(call.name, call.input)
-                if call.name in UNTRUSTED_SOURCE_TOOLS:
+                execution_ok = True
+                try:
+                    output = execute_tool(call.name, call.input)
+                except (ToolSecurityError, OSError) as exc:
+                    execution_ok = False
+                    output = f"[ARGUS 工具拒绝] {exc}"
+                    self.on_event("tool_error", {"call": call, "error": str(exc)})
+                if execution_ok and call.name in UNTRUSTED_SOURCE_TOOLS:
                     register_tool_output_taint(ctx, call, output)
                 messages.append({
                     "role": "tool",

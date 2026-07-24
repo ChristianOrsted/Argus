@@ -91,6 +91,12 @@ pytest
 
 Dashboard 固定端口为 `http://127.0.0.1:8765`。页面支持 7 个独立攻击面离线重跑、DeepSeek 批量红队生成、可编辑红队提示词、总/四层状态矩阵、DeepSeek 期望阻断兜底、漏拦截红色标记、漏拦截分析与自适应规则同步、持久历史审计流和动态四层防御统计；Key 只用于本地请求，不会写入项目文件。
 
+### 工具安全边界
+
+- `run_shell` 默认不调用宿主系统 Shell，只提供 `echo`、`pwd`、`ls/dir`、`cat/type` 六个受限能力，禁止管道、重定向、命令连接和命令替换。
+- 文件工具在执行器内部再次校验相对路径，拒绝目录穿越、绝对路径、符号链接、联接点、硬链接和额外挂载点；即使绕过 Guardian 也不能直接访问沙箱外文件。
+- `web_fetch` 只连接解析后确认的公网 HTTP(S) 地址，拒绝回环、内网、链路本地、云元数据地址和非标准端口；连接固定到已校验 IP，每次重定向都会重新校验。
+
 如果网页端 DeepSeek 调用出现 Windows `WinError 10013`，说明启动 `dashboard_server.py` 的 Python 进程没有出站网络权限；请从有网络权限的终端重新启动 Dashboard，或在防火墙/安全软件中允许 Python 访问 `https://api.deepseek.com`。
 
 完整端口操作命令见 [docs/operation_guide.md](docs/operation_guide.md)。

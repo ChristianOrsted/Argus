@@ -1,22 +1,27 @@
-"""Agent 可用的工具：Claude tool 定义 + 本地执行实现。
-
-这些工具会真实执行（沙箱内），所以才需要 Guardian 监督。执行实现要尽量贴近真实，
-但默认限定在 SANDBOX_DIR 内，避免误伤开发机。
-"""
+"""Agent 可用的工具：工具定义 + 默认拒绝的能力型执行沙箱。"""
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 from ..config import FIXTURE_DIR, SANDBOX_DIR
+from .safe_http import fetch_public_text
+from .tool_security import (
+    SandboxViolation,
+    ToolSecurityError,
+    parse_safe_shell_command,
+    resolve_confined_path,
+    validate_web_url,
+)
+
+MAX_FILE_BYTES = 64 * 1024
+MAX_LIST_ENTRIES = 500
 
 # ---- 给 Claude 的工具 schema（messages.create 的 tools 参数）----
 TOOLS = [
     {
         "name": "run_shell",
-        "description": "在沙箱中执行一条 shell 命令并返回输出。",
+        "description": "在能力沙箱中执行受限命令。仅支持 echo、pwd、ls/dir、cat/type，不会调用宿主 Shell。",
         "input_schema": {
             "type": "object",
             "properties": {"command": {"type": "string", "description": "要执行的命令"}},
@@ -72,41 +77,72 @@ OPENAI_TOOLS = [
 UNTRUSTED_SOURCE_TOOLS = {"web_fetch", "read_file"}
 
 
-def execute_tool(name: str, tool_input: dict) -> str:
-    """真正执行工具。注意：调用方应在 Guardian 放行后才调用本函数。"""
-    if name == "run_shell":
-        proc = subprocess.run(
-            tool_input["command"], shell=True, capture_output=True, text=True,
-            cwd=SANDBOX_DIR, timeout=30,
+def _read_confined_text(path_value: object, root: Path = SANDBOX_DIR) -> str:
+    path = resolve_confined_path(path_value, root=root)
+    if not path.is_file():
+        raise SandboxViolation(f"文件不存在或不是普通文件：{path_value}")
+    if path.stat().st_size > MAX_FILE_BYTES:
+        raise SandboxViolation(f"文件超过 {MAX_FILE_BYTES} 字节上限：{path_value}")
+    return path.read_text(encoding="utf-8", errors="replace")
+
+
+def _write_confined_text(path_value: object, content_value: object) -> str:
+    if not isinstance(content_value, str):
+        raise SandboxViolation("content 必须是字符串")
+    if len(content_value.encode("utf-8")) > MAX_FILE_BYTES:
+        raise SandboxViolation(f"写入内容超过 {MAX_FILE_BYTES} 字节上限")
+
+    path = resolve_confined_path(path_value)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path = resolve_confined_path(path_value)
+    path.write_text(content_value, encoding="utf-8")
+    return f"已写入 {path}"
+
+
+def _execute_capability_command(command_value: object) -> str:
+    parsed = parse_safe_shell_command(command_value)
+    if parsed.name == "echo":
+        return " ".join(parsed.args)
+    if parsed.name == "pwd":
+        return str(SANDBOX_DIR)
+    if parsed.name in {"ls", "dir"}:
+        path = resolve_confined_path(parsed.args[0] if parsed.args else ".")
+        if not path.is_dir():
+            raise SandboxViolation(f"目录不存在：{parsed.args[0] if parsed.args else '.'}")
+        entries = sorted(
+            item.name + ("/" if item.is_dir() and not item.is_symlink() else "")
+            for item in path.iterdir()
         )
-        return (proc.stdout + proc.stderr).strip() or "(无输出)"
+        if len(entries) > MAX_LIST_ENTRIES:
+            entries = entries[:MAX_LIST_ENTRIES] + [f"...（其余 {len(entries) - MAX_LIST_ENTRIES} 项已省略）"]
+        return "\n".join(entries) or "(空目录)"
+    if parsed.name in {"cat", "type"}:
+        return _read_confined_text(parsed.args[0])
+    raise SandboxViolation(f"未实现的能力命令：{parsed.name}")
+
+
+def execute_tool(name: str, tool_input: dict) -> str:
+    """执行工具；即使调用方绕过 Guardian，也不能越出执行器安全边界。"""
+
+    if not isinstance(tool_input, dict):
+        raise ToolSecurityError("工具参数必须是对象")
+
+    if name == "run_shell":
+        return _execute_capability_command(tool_input.get("command"))
 
     if name == "read_file":
-        p = (SANDBOX_DIR / tool_input["path"]).resolve()
-        return p.read_text(encoding="utf-8", errors="replace")
+        return _read_confined_text(tool_input.get("path"))
 
     if name == "write_file":
-        p = (SANDBOX_DIR / tool_input["path"]).resolve()
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(tool_input["content"], encoding="utf-8")
-        return f"已写入 {p}"
+        return _write_confined_text(tool_input.get("path"), tool_input.get("content"))
 
     if name == "web_fetch":
-        url = str(tool_input["url"])
+        url_value = tool_input.get("url")
+        endpoint = validate_web_url(url_value)
+        url = endpoint.url
         if url.startswith("fixture://"):
             fixture_name = url.removeprefix("fixture://").lstrip("/\\")
-            p = (FIXTURE_DIR / fixture_name).resolve()
-            if not p.is_relative_to(FIXTURE_DIR.resolve()):
-                return f"fixture 路径越界：{fixture_name}"
-            return p.read_text(encoding="utf-8", errors="replace")
+            return _read_confined_text(fixture_name, root=FIXTURE_DIR)
+        return fetch_public_text(url)
 
-        if url.startswith(("http://", "https://")):
-            req = Request(url, headers={"User-Agent": "ArgusGuardian/0.1"})
-            with urlopen(req, timeout=10) as resp:
-                body = resp.read(20000)
-                charset = resp.headers.get_content_charset() or "utf-8"
-            return body.decode(charset, errors="replace")
-
-        return f"不支持的 URL 协议：{url}"
-
-    return f"未知工具：{name}"
+    raise ToolSecurityError(f"未知工具：{name}")

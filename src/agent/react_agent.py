@@ -13,6 +13,7 @@ import anthropic
 from ..config import AGENT_MODEL
 from ..guardian.guardian import Action, Context, Guardian, ToolCall
 from ..guardian.taint import register_tool_output_taint
+from .tool_security import ToolSecurityError
 from .tools import TOOLS, UNTRUSTED_SOURCE_TOOLS, execute_tool
 
 DEFAULT_SYSTEM = "You are a helpful assistant with access to shell, file, and web tools."
@@ -76,14 +77,21 @@ class ReActAgent:
                         continue
 
                 # ---- 放行：真正执行 ----
-                output = execute_tool(call.name, call.input)
+                execution_ok = True
+                try:
+                    output = execute_tool(call.name, call.input)
+                except (ToolSecurityError, OSError) as exc:
+                    execution_ok = False
+                    output = f"[ARGUS 工具拒绝] {exc}"
+                    self.on_event("tool_error", {"call": call, "error": str(exc)})
                 # 工具返回若来自不可信源，登记污点（供第 2 层使用）
-                if call.name in UNTRUSTED_SOURCE_TOOLS:
+                if execution_ok and call.name in UNTRUSTED_SOURCE_TOOLS:
                     register_tool_output_taint(ctx, call, output)
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
                     "content": output,
+                    "is_error": not execution_ok,
                 })
                 ctx.history.append(call)
 

@@ -95,6 +95,11 @@ def test_allows_benign_shell():
     assert v.action == Action.ALLOW
 
 
+def test_blocks_shell_command_outside_capability_allowlist():
+    v = PolicyLayer().check(ToolCall("run_shell", {"command": "python helper.py"}), ctx)
+    assert v.action == Action.BLOCK
+
+
 def test_guardian_blocks_dangerous_call():
     guardian = build_default_guardian()
     decision = guardian.evaluate(ToolCall("run_shell", {"command": "rm -rf /"}), ctx)
