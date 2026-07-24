@@ -578,3 +578,23 @@ Validation:
 - `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed twice.
 - Rendered pages 6-15 with Poppler and inspected the four-layer explanation, code snippets, result tables, and representative-case table.
 - Secret scan passed: no real DeepSeek API key was written to tracked project files.
+
+## Stage 25 - Report diagrams and demo flow
+
+Commit message: `docs: add report diagrams and code annotations`
+
+Completed scope:
+
+- Add TikZ support and shared light-color figure styles to the final LaTeX report.
+- Replace the system architecture placeholder with an in-report architecture diagram covering user request, LLM Agent, ToolCall, four Guardian layers, decision, execution or blocking, audit logs, and Dashboard.
+- Replace the four-layer Guardian placeholder with an in-report decision-flow diagram showing Policy, Taint, Intent, Anomaly, Verdict aggregation, and final `BLOCK / FLAG / ALLOW` results.
+- Add a web demo workflow diagram showing the classroom operation path from Dashboard startup to attack replay, matrix inspection, detail expansion, rule management, and acceptance artifacts.
+- Add comments to the report's key Guardian and Taint code excerpts, plus short prose explaining what each annotated code block proves.
+- Update appendix screenshot guidance so generated overview diagrams are no longer listed as required manual screenshots.
+- Update project overview and update log to reflect the new 20-page report PDF.
+
+Validation:
+
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed twice.
+- Rendered pages 4-12 with Poppler and inspected the generated architecture diagram, code annotations, Guardian flow diagram, demo workflow diagram, and screenshot placeholders.
+- Secret scan passed: no real DeepSeek API key was written to tracked project files.

@@ -206,8 +206,8 @@ Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求
 - `architecture.md`：系统架构说明。
 - `operation_guide.md`：Dashboard 启停、端口释放、DeepSeek 在线演示和排障操作指导。
 - `project_overview.md`：总体性说明和验收指南。
-- `final_report.tex`：课程正式 LaTeX 报告，包含风险分析、系统设计、实验结果和截图占位说明。
-- `final_report.pdf`：按夏季学期报告模板编译出的 19 页 PDF 预览版，保留截图占位说明。
+- `final_report.tex`：课程正式 LaTeX 报告，包含风险分析、系统设计、实验结果、关键代码注释、系统架构图和截图占位说明。
+- `final_report.pdf`：按夏季学期报告模板编译出的 20 页 PDF 预览版，已内置系统总体架构图、四层 Guardian 判定流程图和网页演示操作流程图，真实网页运行截图保留占位。
 - `llm_security_argus_briefing.pptx`：9 页课程汇报 PPT，覆盖研究问题、系统方案、实验结果、演示验收和后续展望。
 - `final_report.md`：早期课程报告草稿。
 - `eval_results.md`：自动生成的评测结果。
@@ -517,7 +517,7 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 最新离线平均审计延时：0.897ms，p50 0.875ms，p95 1.471ms
 - Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
 - 前端样式烟测：`dashboard/styles.css` 已切换到 `color-scheme: light`
-- LaTeX 报告编译：`report/final_report.pdf` 生成 19 页 PDF
+- LaTeX 报告编译：`report/final_report.pdf` 生成 20 页 PDF，报告内置系统总体架构图、四层 Guardian 判定流程图和网页演示操作流程图
 - 密钥扫描：未发现真实 DeepSeek API Key 写入项目文件
 
 ## 7. 后续还能增强什么

@@ -1,5 +1,20 @@
 # Argus Update Log
 
+## 2026-07-24 - Report Diagrams And Demo Flow
+
+本次报告补充：
+
+- 在 `report/final_report.tex` 中加入 TikZ 绘图样式，直接生成系统总体架构图，覆盖用户请求、LLM Agent、ToolCall、四层 Guardian、最终决策、工具执行或阻断、审计日志和 Dashboard。
+- 将“四层 Guardian 判定流程图”从截图占位改为报告内置流程图，明确展示 Policy、Taint、Intent、Anomaly 四层如何产生 Verdict，以及 `BLOCK > FLAG > ALLOW` 的聚合规则。
+- 在“网页演示系统”小节新增网页操作流程图，说明课堂展示时从打开 Dashboard、选择攻击面、运行审计、查看矩阵、展开详情到沉淀验收记录的路径。
+- 为报告中的 Guardian 汇总决策代码和 Taint 片段级污点代码加入注释，并补充正文说明，方便答辩时解释关键代码。
+- 调整附录截图清单：架构图和流程图已由报告生成，后续主要补 Dashboard、DeepSeek 攻击链、规则管理、Benchmark 和演示验收的真实运行截图。
+
+本次验证结果：
+
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 20 页 PDF。
+- 渲染抽查通过：使用 Poppler 抽查摘要页、系统架构图、代码节选、四层判定流程图和网页演示流程图，未发现遮挡或溢出。
+
 ## 2026-07-24 - Report Narrative And Four-Layer Explanation Polish
 
 本次报告润色：

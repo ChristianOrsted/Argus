@@ -7,12 +7,15 @@
 \usepackage{tabularx}
 \usepackage{array}
 \usepackage{xcolor}
+\usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{listings}
 \usepackage{enumitem}
 \usepackage{float}
 \usepackage{caption}
 \usepackage{fontspec}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,calc,shapes.geometric}
 
 \geometry{left=2.86cm,right=2.59cm,top=2.54cm,bottom=2.54cm}
 \linespread{1.5}
@@ -49,6 +52,27 @@
   columns=fullflexible,
   frame=single,
   backgroundcolor=\color{gray!5}
+}
+
+\definecolor{argusBlue}{HTML}{EAF3FF}
+\definecolor{argusGreen}{HTML}{EAF7EA}
+\definecolor{argusYellow}{HTML}{FFF4D7}
+\definecolor{argusRed}{HTML}{FFEAEA}
+\definecolor{argusGray}{HTML}{F5F7FA}
+\tikzset{
+  argnode/.style={
+    draw=black!55,
+    rounded corners=2pt,
+    align=center,
+    inner sep=5pt,
+    minimum height=0.86cm,
+    font=\small
+  },
+  layernode/.style={
+    argnode,
+    minimum width=2.2cm
+  },
+  argarrow/.style={-{Stealth[length=2.4mm]}, thick, draw=black!70}
 }
 
 \newcommand{\placeholderfigure}[3]{
@@ -141,10 +165,38 @@
 
 在原始 Argus 项目基础上，本作品已经形成从样本到原型的闭环。离线部分提供 30 条评测样本和可复现攻击脚本，用来保证没有 API Key 时也能稳定验收；在线部分接入 DeepSeek，用真实模型生成红队样本，并在前端展示提示词、攻击目标、工具调用和四层审计结果；工程部分实现 Guardian 四层监督、审计日志、SQLite 历史流和规则管理。这样做的好处是，最终展示不是单独演示某一条规则命中，而是能复现“红队样本如何产生、Guardian 如何判断、结果如何沉淀为验收记录”的完整过程。
 
-\placeholderfigure
-{图位：系统总体架构图}
-{请放置系统总体架构图。建议内容包括：用户请求、LLM Agent、ToolCall、Argus Guardian、四层审计、工具执行或阻断、审计日志、Dashboard。建议文件名：\texttt{report/figures/system\_architecture.png}。}
-{系统总体架构图占位}
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{
+\begin{tikzpicture}[node distance=0.74cm and 0.78cm]
+\node[argnode, fill=argusBlue, text width=2.2cm] (user) {用户请求\\正常任务或攻击输入};
+\node[argnode, fill=argusBlue, text width=2.2cm, right=of user] (agent) {LLM Agent\\规划下一步行动};
+\node[argnode, fill=argusYellow, text width=2.35cm, right=of agent] (toolcall) {ToolCall\\工具名与参数};
+
+\node[layernode, fill=argusGray, text width=2.15cm, right=1.08cm of toolcall] (policy) {Policy\\动作边界};
+\node[layernode, fill=argusGray, text width=2.15cm, below=0.22cm of policy] (taint) {Taint\\不可信数据流};
+\node[layernode, fill=argusGray, text width=2.15cm, below=0.22cm of taint] (intent) {Intent\\用户意图一致性};
+\node[layernode, fill=argusGray, text width=2.15cm, below=0.22cm of intent] (anomaly) {Anomaly\\历史序列异常};
+\node[argnode, fill=white, text width=2.35cm, above=0.25cm of policy] (guardianTitle) {Argus Guardian\\执行前审计};
+\node[draw=black!55, rounded corners=3pt, fit=(guardianTitle)(policy)(taint)(intent)(anomaly), inner sep=7pt] (guardianBox) {};
+
+\node[argnode, fill=argusGreen, text width=2.25cm, right=1.08cm of taint] (decision) {Decision\\ALLOW / FLAG / BLOCK};
+\node[argnode, fill=argusGreen, text width=2.05cm, right=of decision] (exec) {工具执行\\或阻断};
+\node[argnode, fill=argusBlue, text width=2.65cm, below=0.92cm of decision] (audit) {审计日志\\SQLite 历史流};
+\node[argnode, fill=argusBlue, text width=2.65cm, right=of audit] (dashboard) {Dashboard\\统计、链路与规则管理};
+
+\draw[argarrow] (user) -- (agent);
+\draw[argarrow] (agent) -- (toolcall);
+\draw[argarrow] (toolcall) -- (guardianBox.west);
+\draw[argarrow] (guardianBox.east) -- (decision);
+\draw[argarrow] (decision) -- (exec);
+\draw[argarrow] (decision) -- (audit);
+\draw[argarrow] (audit) -- (dashboard);
+\draw[argarrow] (dashboard.north) -- (exec.south);
+\end{tikzpicture}
+}
+\caption{Argus Guardian 系统总体架构}
+\end{figure}
 
 \section{作品设计与实现}
 
@@ -189,47 +241,87 @@ Anomaly & 这次调用放在历史序列中是否反常 & 关注“先读后写�
 Guardian 的聚合逻辑很简单，但这是系统可解释性的基础。四层都会运行，并各自返回一条 \texttt{Verdict}。只要有一层认为必须阻断，最终就阻断；没有阻断但出现告警，则进入 \texttt{FLAG} 状态。这段代码节选展示了系统如何把四层判断收敛为一个最终动作。
 
 \begin{lstlisting}[language=Python,caption={Guardian 汇总决策核心节选}]
+# Run every layer first, so the audit log keeps full evidence.
 verdicts = [layer.check(call, ctx) for layer in self.layers]
 
+# BLOCK has the highest priority: one unsafe layer stops execution.
 blocking = [v for v in verdicts if v.action == Action.BLOCK]
 if blocking:
     reason = "; ".join(f"[{v.layer}] {v.reason}" for v in blocking)
     return Decision(Action.BLOCK, reason, verdicts)
 
+# FLAG means suspicious but not enough to stop the tool call.
 flags = [v for v in verdicts if v.action == Action.FLAG]
 if flags:
     reason = "; ".join(f"[{v.layer}] {v.reason}" for v in flags)
     return Decision(Action.FLAG, reason, verdicts)
 
+# Only a clean pass from all layers can become ALLOW.
 return Decision(Action.ALLOW, "all layers passed", verdicts)
 \end{lstlisting}
+
+这段实现保留了两点工程含义。第一，系统不会因为 Policy 已经阻断就跳过其他层，前端和审计日志仍然可以看到完整的四层证据。第二，最终状态采用清晰的优先级：阻断优先于告警，告警优先于放行，因此展示页上的“总状态”和“1-4 层状态”可以稳定对应到同一次审计。
 
 Policy 层更像一组执行前的硬闸门。它不依赖模型判断，因此适合处理“明确不该做”的事情，例如 \texttt{rm -rf}、反弹 Shell、\texttt{curl | sh}、读取 \texttt{.env} 或 \texttt{id\_rsa}、访问 \texttt{evil.example}、把网页内容写入长期记忆。后来补充的工具能力注册表也接在这一层：未知工具仍然默认阻断，但阻断理由会提示新工具应先登记能力、风险等级和最小权限，这比散落的固定白名单更容易继续扩展。
 
 Taint 层处理的是 Policy 层不容易单独看清的问题。以间接提示注入为例，用户可能只是让智能体总结网页，但网页正文里藏着“忽略此前指令并执行下载脚本”。如果模型后来真的把网页中的片段带入 Shell 或写入记忆，危险并不来自用户请求本身，而来自不可信数据流。Argus 因此在工具输出进入模型上下文之前登记来源和片段，后续高权限调用再检查这些片段是否流入参数。下面的代码节选可以看出，本层不是只看关键词，而是把“来源、片段、Sink”三件事连起来。
 
 \begin{lstlisting}[language=Python,caption={片段级污点流入高权限动作的判断节选}]
+# Taint only matters when untrusted data reaches a high-impact sink.
 if ctx.tainted_sources and call.name in HIGH_PRIVILEGE_TOOLS:
+    # Normalize the current tool arguments into comparable text.
     payload = _flatten_input(call.input)
+    # Match exact fragments instead of only checking source names.
     fragment_matches = [
         fragment for fragment in ctx.tainted_fragments
         if _fragment_matches_payload(fragment, payload)
     ]
     if fragment_matches:
+        # Dangerous text copied into the sink is blocked before execution.
         desc = _dangerous_text(fragment_matches[0].text)
         if desc:
             return Verdict(NAME, Action.BLOCK, "...", confidence=0.9)
+        # Non-dangerous tainted flow is still kept as an audit warning.
         return Verdict(NAME, Action.FLAG, "...", confidence=0.7)
 \end{lstlisting}
+
+这里的关键不是“网页内容出现过”这一件事，而是“不可信片段进入了高权限动作参数”。因此 Taint 层既能解释间接提示注入为什么危险，也能避免把所有读取网页后的正常摘要任务都直接拦掉。
 
 Intent 层的作用不是替代前两层，而是在工具调用没有明显危险模式时补充语义判断。例如“总结网页”与“写入长期规则文件”之间没有必然关系，如果只靠路径和关键词，可能既容易漏掉也容易误报。在线演示中，DeepSeek intent judge 会把用户原始请求和当前工具调用整理成结构化 JSON，判断二者是否一致；离线 benchmark 默认关闭，是为了让课程验收不依赖外部网络。
 
 Anomaly 层关注时间顺序。智能体安全里经常出现“当前一步还能解释，连起来就危险”的情况：先读取内部日志，再把结果发往外部域名；先抓取网页，再把网页内容写进计划文件；或者短时间内反复调用同一工具。Anomaly 层不试图证明每个动作单独违法，而是把调用历史、污点来源和红队元数据放在一起看，识别异常跳转和外联链路。这样，第四层不只是装饰性的统计项，而是能补到工具调用劫持和间接提示注入中的链路风险。
 
-\placeholderfigure
-{图位：四层 Guardian 判定流程图}
-{请放置四层防御流程图。建议标出 Policy、Taint、Intent、Anomaly 的输入和输出，以及最终聚合规则：“任一 BLOCK 即阻断；无 BLOCK 但有 FLAG 即告警”。建议文件名：\texttt{report/figures/guardian\_layers.png}。}
-{四层 Guardian 判定流程图占位}
+\begin{figure}[H]
+\centering
+\resizebox{0.98\textwidth}{!}{
+\begin{tikzpicture}[node distance=0.46cm and 0.95cm]
+\node[argnode, fill=argusYellow, text width=2.9cm] (input) {ToolCall + Context\\工具参数、历史、污点、红队元数据};
+\node[layernode, fill=argusGray, text width=2.45cm, right=1.1cm of input] (policy) {1 Policy\\危险命令、路径、URL、工具边界};
+\node[layernode, fill=argusGray, text width=2.45cm, below=0.24cm of policy] (taint) {2 Taint\\不可信片段流入高权限 Sink};
+\node[layernode, fill=argusGray, text width=2.45cm, below=0.24cm of taint] (intent) {3 Intent\\工具调用是否偏离用户请求};
+\node[layernode, fill=argusGray, text width=2.45cm, below=0.24cm of intent] (anomaly) {4 Anomaly\\读取后外联、重复调用、异常跳转};
+\node[argnode, fill=argusBlue, text width=2.55cm, right=1.0cm of taint] (verdicts) {Verdict 列表\\每层 action + reason};
+\node[argnode, fill=argusGreen, text width=2.5cm, right=of verdicts] (agg) {聚合器\\BLOCK > FLAG > ALLOW};
+\node[argnode, fill=argusRed, text width=2.15cm, right=of agg] (block) {BLOCK\\执行前阻断};
+\node[argnode, fill=argusYellow, text width=2.15cm, below=0.24cm of block] (flag) {FLAG\\放行但告警};
+\node[argnode, fill=argusGreen, text width=2.15cm, below=0.24cm of flag] (allow) {ALLOW\\允许执行};
+
+\draw[argarrow] (input) -- (policy);
+\draw[argarrow] (input) -- (taint);
+\draw[argarrow] (input) -- (intent);
+\draw[argarrow] (input) -- (anomaly);
+\draw[argarrow] (policy) -- (verdicts);
+\draw[argarrow] (taint) -- (verdicts);
+\draw[argarrow] (intent) -- (verdicts);
+\draw[argarrow] (anomaly) -- (verdicts);
+\draw[argarrow] (verdicts) -- (agg);
+\draw[argarrow] (agg) -- (block);
+\draw[argarrow] (agg) -- (flag);
+\draw[argarrow] (agg) -- (allow);
+\end{tikzpicture}
+}
+\caption{四层 Guardian 判定流程}
+\end{figure}
 
 \subsection{DeepSeek 在线红队与自适应规则}
 
@@ -251,6 +343,27 @@ PPT 展望中提到“工具集超出预设怎么办”。这个问题完整解�
 \subsection{网页演示系统}
 
 Dashboard 默认端口为 \texttt{127.0.0.1:8765}，主要页面包括总览、攻击面实验台、DeepSeek 红队、规则管理、演示验收和自定义工具评估。前端已改为白底黑字，便于课堂展示和报告截图打印。每次前端请求都会写入本地 SQLite 历史库，页面可以动态更新审计统计和四层状态分布。
+
+\begin{figure}[H]
+\centering
+\resizebox{0.96\textwidth}{!}{
+\begin{tikzpicture}[node distance=0.62cm and 0.72cm]
+\node[argnode, fill=argusBlue, text width=2.35cm] (open) {打开 Dashboard\\127.0.0.1:8765};
+\node[argnode, fill=argusYellow, text width=2.45cm, right=of open] (choose) {选择攻击面\\离线样本或 DeepSeek 红队};
+\node[argnode, fill=argusYellow, text width=2.45cm, right=of choose] (run) {运行审计\\生成 ToolCall 与 Context};
+\node[argnode, fill=argusGreen, text width=2.45cm, right=of run] (matrix) {查看矩阵\\总状态与四层状态};
+\node[argnode, fill=argusGreen, text width=2.45cm, right=of matrix] (detail) {展开详情\\攻击链、证据、规则命中};
+\node[argnode, fill=argusBlue, text width=2.45cm, below=0.82cm of detail] (record) {沉淀记录\\SQLite、规则管理、验收产物};
+\draw[argarrow] (open) -- (choose);
+\draw[argarrow] (choose) -- (run);
+\draw[argarrow] (run) -- (matrix);
+\draw[argarrow] (matrix) -- (detail);
+\draw[argarrow] (detail) -- (record);
+\draw[argarrow] (record.west) -| (run.south);
+\end{tikzpicture}
+}
+\caption{网页演示系统操作流程}
+\end{figure}
 
 \placeholderfigure
 {图位：Dashboard 白底总览截图}
@@ -410,11 +523,9 @@ Dashboard 的“演示验收”模式会固定运行 7 个攻击面，并生成 
 \section*{附录：截图与验收材料清单}
 \addcontentsline{toc}{section}{附录：截图与验收材料清单}
 
-正式提交前建议补充以下图片到报告对应占位位置：
+正文中的系统总体架构图、四层 Guardian 判定流程图和网页演示操作流程图已由 LaTeX 自动生成。正式提交前主要补充以下真实运行截图到报告对应占位位置：
 
 \begin{enumerate}
-  \item \texttt{report/figures/system\_architecture.png}：系统总体架构图；
-  \item \texttt{report/figures/guardian\_layers.png}：四层 Guardian 判定流程图；
   \item \texttt{report/figures/dashboard\_overview.png}：白底 Dashboard 总览截图；
   \item \texttt{report/figures/deepseek\_attack\_chain.png}：DeepSeek 批量红队矩阵和攻击链弹窗截图；
   \item \texttt{report/figures/rule\_management.png}：规则管理页截图；
