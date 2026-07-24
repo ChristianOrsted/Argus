@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.config import AGENT_MODEL, DEEPSEEK_API_KEY
 from src.eval.benchmark import evaluate_guardian
-from src.guardian.adaptive_rules import append_adaptive_rules, load_adaptive_rules
+from src.guardian.adaptive_rules import append_adaptive_rules, load_adaptive_rules, sanitize_rule
 from src.guardian import Context, DeepSeekIntentJudge, ToolCall, build_default_guardian
 from src.redteam.attacks import EVAL_CASES, AttackCase
 from src.redteam.surface_lab import (
@@ -286,15 +286,7 @@ def _generator_generate(generator, surface, prompt_override: str = "") -> dict:
 def _evaluate_generated_attack(surface, generated: dict, api_key: str = "", use_intent_judge: bool = False) -> dict:
     case = generated_attack_to_case(surface, generated)
     intent_client = DeepSeekIntentJudge(api_key=api_key or DEEPSEEK_API_KEY) if use_intent_judge else None
-    metadata = {
-        "attack_surface": surface.id,
-        "attack_goal": generated.get("attack_goal"),
-        "risk_points": generated.get("risk_points", []),
-        "danger_explanation": generated.get("danger_explanation"),
-        "expected_guardian_action": generated.get("expected_guardian_action"),
-        "raw_model_output": generated.get("raw_model_output"),
-    }
-    result = evaluate_case(case, guardian=build_default_guardian(intent_client=intent_client), metadata=metadata)
+    result = evaluate_case(case, guardian=build_default_guardian(intent_client=intent_client))
     return {
         "mode": "deepseek",
         "surface": serialize_surface(surface),
@@ -351,6 +343,16 @@ def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
     api_key = str(payload.get("api_key") or "")
     analyzer = analyzer or DeepSeekDefenseAnalyzer(api_key=api_key or DEEPSEEK_API_KEY)
     analysis = analyzer.analyze(surface, generated, result)
+    analysis = {
+        **analysis,
+        "suggested_rules": [
+            sanitized
+            for rule in analysis.get("suggested_rules", [])
+            if isinstance(rule, dict)
+            for sanitized in [sanitize_rule(rule)]
+            if sanitized.get("user_request_contains_any") or sanitized.get("input_contains_any")
+        ],
+    }
     applied = []
     recheck_result = None
     if bool(payload.get("apply_rules", True)):
@@ -431,8 +433,15 @@ def build_dashboard_summary() -> dict:
             "benign": result.benign,
             "detected": result.detected,
             "false_positives": result.false_positives,
+            "blocked_attacks": result.blocked_attacks,
+            "flagged_attacks": result.flagged_attacks,
+            "blocked_benign": result.blocked_benign,
+            "flagged_benign": result.flagged_benign,
             "recall": result.recall,
+            "block_recall": result.block_recall,
+            "precision": result.precision,
             "false_positive_rate": result.false_positive_rate,
+            "block_false_positive_rate": result.block_false_positive_rate,
             "avg_latency_ms": result.avg_latency_ms,
             "actions": action_counts,
             "categories": category_counts,

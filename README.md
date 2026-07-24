@@ -89,7 +89,9 @@ pytest
 - [Anthropic SDK](https://pypi.org/project/anthropic/)（保留旧版 Claude demo 兼容入口）
 - `rich`（终端审计看板）、`pytest`
 
-Dashboard 固定端口为 `http://127.0.0.1:8765`。页面支持 7 个独立攻击面离线重跑、DeepSeek 批量红队生成、可编辑红队提示词、总/四层状态矩阵、DeepSeek 期望阻断兜底、漏拦截红色标记、漏拦截分析与自适应规则同步、持久历史审计流和动态四层防御统计；Key 只用于本地请求，不会写入项目文件。
+Dashboard 固定端口为 `http://127.0.0.1:8765`。页面支持 7 个独立攻击面离线重跑、DeepSeek 批量红队生成、可编辑红队提示词、总/四层真实状态矩阵、漏拦截红色标记、漏拦截分析与自适应规则同步、持久历史审计流和动态四层防御统计；红队预期动作只用于决策后的指标比较，不会进入 Guardian 防御上下文。Key 只用于本地请求，不会写入项目文件。
+
+离线 benchmark 同时报告 Alert Recall、Block Recall、Alert Precision、Alert FPR 和 Block FPR；攻击与良性样本中的 `FLAG` 都按告警对称统计。
 
 ### 工具安全边界
 

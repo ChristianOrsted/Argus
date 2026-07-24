@@ -1,5 +1,15 @@
 # Argus Update Log
 
+## 2026-07-24 - Remove Label Leakage And Correct Metrics
+
+本次修复：
+
+- 移除 Policy 对 `expected_guardian_action`、`risk_points`、`danger_explanation` 等红队答案字段的读取。
+- DeepSeek 红队评估不再把攻击标签、解释或模型自报的 `tainted_sources` 写入 Guardian 上下文。
+- 自适应规则只能匹配运行时可观察的工具名、用户请求和工具输入，不能匹配攻击面或 metadata。
+- 前端状态矩阵始终显示 Guardian 的真实动作；漏拦截只做额外标记，不再把 `ALLOW` 显示成 `BLOCK`。
+- 良性样本的 `FLAG` 与 `BLOCK` 都计入告警误报，并新增 Block/Alert Recall、Precision 和两类 FPR。
+
 ## 2026-07-16 - Operation Guide And Topic-Aligned Self Audit
 
 本次新增文档：

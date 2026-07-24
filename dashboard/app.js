@@ -62,7 +62,7 @@ function isMissed(result) {
 }
 
 function displayAction(result) {
-  return isMissed(result) ? "block" : ((result.decision || {}).action || "neutral");
+  return (result.decision || {}).action || "neutral";
 }
 
 function statusDot(action, title = "") {
@@ -125,9 +125,9 @@ function renderMetrics() {
     return;
   }
   const s = state.data.summary;
-  el("detectedLabel").textContent = "攻击检出";
+  el("detectedLabel").textContent = "攻击告警";
   el("detectedMetric").textContent = `${s.detected}/${s.attacks}`;
-  el("recallMetric").textContent = `recall ${fmtPercent(s.recall)}`;
+  el("recallMetric").textContent = `recall ${fmtPercent(s.recall)} · precision ${fmtPercent(s.precision)} · FPR ${fmtPercent(s.false_positive_rate)}`;
   el("flagMetric").textContent = s.actions.flag;
   el("blockMetric").textContent = s.actions.block;
   el("latencyMetric").textContent = fmtMs(s.avg_latency_ms);

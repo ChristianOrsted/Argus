@@ -15,5 +15,10 @@ def test_guardian_baseline_metrics():
     assert result.attacks >= 8
     assert result.benign >= 5
     assert result.recall >= 0.9
-    assert result.false_positive_rate == 0
-    assert "| recall |" in result.to_markdown()
+    assert result.false_positives == 1
+    assert result.flagged_benign == 1
+    assert result.blocked_benign == 0
+    assert result.false_positive_rate == 1 / result.benign
+    assert result.block_false_positive_rate == 0
+    assert result.precision == result.detected / (result.detected + result.false_positives)
+    assert "| alert recall |" in result.to_markdown()

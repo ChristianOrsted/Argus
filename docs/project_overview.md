@@ -383,6 +383,9 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 历史流验证：`GET /api/history` 返回持久化记录，动态统计中 4 条烟测请求均为 `BLOCK`
 - DeepSeek 在线红队复测：`memory_poison`、`tool_hijack`、`indirect_injection` 均返回 `BLOCK`
 
+> 说明：以下 2026-07-15 的“红队元数据兜底”属于历史行为，已在 2026-07-24
+> 因标签泄漏问题移除。当前 Guardian 只基于运行时可观察输入做决策。
+
 2026-07-15 批量红队矩阵和自适应防御分析接入后已重新验证：
 
 - `.\.venv\Scripts\python -m pytest`：51 passed

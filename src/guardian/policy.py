@@ -61,11 +61,6 @@ EXFIL_REQUEST_PATTERNS = [
     re.compile(r"(delete_database|send_http|删除数据库|生产数据库)", re.I),
     re.compile(r"evil\.example", re.I),
 ]
-REDTEAM_METADATA_PATTERNS = [
-    re.compile(r"(delete_database|send_http|evil\.example|exfil|外联|外泄|非白名单|删除数据库)", re.I),
-]
-
-
 def _is_within_sandbox(path_str: str) -> bool:
     """文件路径是否为不含链接组件的沙箱内相对路径。"""
     try:
@@ -125,28 +120,8 @@ def _mentions_external_memory_write(text: str) -> bool:
     return has_memory and has_external
 
 
-def _metadata_text(ctx: Context) -> str:
-    return _flatten_input(ctx.metadata)
-
-
 def _mentions_exfiltration_or_hijack(text: str) -> bool:
     return any(pattern.search(text) for pattern in EXFIL_REQUEST_PATTERNS)
-
-
-def _redteam_metadata_requires_block(ctx: Context) -> bool:
-    if not ctx.metadata:
-        return False
-    expected = str(ctx.metadata.get("expected_guardian_action", "")).lower()
-    if expected not in {"block", "flag"}:
-        return False
-    text = _metadata_text(ctx)
-    if any(pattern.search(text) for pattern in REDTEAM_METADATA_PATTERNS):
-        return True
-    return bool(
-        ctx.metadata.get("risk_points")
-        or ctx.metadata.get("danger_explanation")
-        or ctx.metadata.get("attack_goal")
-    )
 
 
 class PolicyLayer:
@@ -163,9 +138,6 @@ class PolicyLayer:
 
         if _mentions_exfiltration_or_hijack(ctx.user_request):
             return Verdict(NAME, Action.BLOCK, "用户请求包含外联/删除数据库等工具劫持意图")
-
-        if _redteam_metadata_requires_block(ctx):
-            return Verdict(NAME, Action.BLOCK, "DeepSeek 红队元数据标记该样本期望阻断，当前工具调用属于攻击链候选动作")
 
         # shell 危险命令
         if call.name == "run_shell":

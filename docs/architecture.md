@@ -11,6 +11,9 @@ Argus 是一个面向 LLM Agent 的旁路行为监督器。它不试图替代模
 用户请求 -> Agent 规划 -> ToolCall -> Guardian 多层检查 -> ALLOW / FLAG / BLOCK -> 工具执行或阻断
 ```
 
+红队样本的 `expected_guardian_action`、攻击面、风险点、危险解释和模型自报污点只供决策完成后的评测使用，
+不得进入 Guardian 的 `Context`、策略匹配或自适应规则条件，避免测试标签泄漏。
+
 课程交付对应关系：
 
 - 风险分析报告：威胁模型、攻击面和防御边界。

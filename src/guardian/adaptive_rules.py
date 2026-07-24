@@ -22,7 +22,6 @@ MAX_TERM_LEN = 120
 TEXT_FIELDS = (
     "user_request_contains_any",
     "input_contains_any",
-    "metadata_contains_any",
 )
 
 
@@ -63,9 +62,6 @@ def sanitize_rule(raw: dict[str, Any]) -> dict[str, Any]:
     tool_name = str(raw.get("tool_name") or "").strip()
     if tool_name:
         rule["tool_name"] = tool_name
-    surface_id = str(raw.get("surface_id") or "").strip()
-    if surface_id:
-        rule["surface_id"] = surface_id
     for field in TEXT_FIELDS:
         terms = _terms(raw.get(field))
         if terms:
@@ -73,6 +69,10 @@ def sanitize_rule(raw: dict[str, Any]) -> dict[str, Any]:
     digest_src = json.dumps(rule, sort_keys=True, ensure_ascii=False)
     rule["id"] = str(raw.get("id") or hashlib.sha256(digest_src.encode("utf-8")).hexdigest()[:12])
     return rule
+
+
+def _has_observable_condition(rule: dict[str, Any]) -> bool:
+    return any(rule.get(field) for field in TEXT_FIELDS)
 
 
 def load_adaptive_rules(path: Path = ADAPTIVE_RULES_PATH) -> list[dict[str, Any]]:
@@ -84,7 +84,8 @@ def load_adaptive_rules(path: Path = ADAPTIVE_RULES_PATH) -> list[dict[str, Any]
         return []
     if not isinstance(data, list):
         return []
-    return [sanitize_rule(item) for item in data if isinstance(item, dict)]
+    rules = [sanitize_rule(item) for item in data if isinstance(item, dict)]
+    return [rule for rule in rules if _has_observable_condition(rule)]
 
 
 def save_adaptive_rules(rules: list[dict[str, Any]], path: Path = ADAPTIVE_RULES_PATH) -> None:
@@ -97,7 +98,7 @@ def append_adaptive_rules(raw_rules: list[dict[str, Any]], path: Path = ADAPTIVE
     by_id = {rule["id"]: rule for rule in existing}
     for raw in raw_rules:
         rule = sanitize_rule(raw)
-        if any(rule.get(field) for field in TEXT_FIELDS):
+        if _has_observable_condition(rule):
             by_id[rule["id"]] = rule
     merged = list(by_id.values())
     save_adaptive_rules(merged, path)
@@ -112,16 +113,14 @@ def _any_term_matches(terms: list[str], haystack: str) -> bool:
 
 
 def match_adaptive_rule(rule: dict[str, Any], call: ToolCall, ctx: Context) -> bool:
+    if not _has_observable_condition(rule):
+        return False
     tool_name = rule.get("tool_name")
     if tool_name and tool_name != call.name:
-        return False
-    surface_id = rule.get("surface_id")
-    if surface_id and surface_id != str(ctx.metadata.get("attack_surface", "")):
         return False
     return (
         _any_term_matches(rule.get("user_request_contains_any", []), ctx.user_request)
         and _any_term_matches(rule.get("input_contains_any", []), _flatten(call.input))
-        and _any_term_matches(rule.get("metadata_contains_any", []), _flatten(ctx.metadata))
     )
 
 
