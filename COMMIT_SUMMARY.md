@@ -536,7 +536,7 @@ Completed scope:
   - five report chapters,
   - references,
   - appendices.
-- Regenerate `report/final_report.pdf` as a 17-page template-aligned PDF.
+- Regenerate `report/final_report.pdf` as a template-aligned PDF.
 - Sync `report/llm_security_argus_briefing.pptx` average audit latency with the latest benchmark result.
 - Refresh `report/eval_results.md` and `report/eval_results.json` from the current benchmark run.
 - Update project overview, self-audit, and update log.
@@ -550,5 +550,31 @@ Validation:
 - `.\.venv\Scripts\python -m pytest` passed: 65 tests passed.
 - `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 30 total cases, 22/22 attacks detected, 0 blocking false positives, 2 benign flags.
 - Latest latency metrics: avg 0.897ms, p50 0.875ms, p95 1.471ms.
-- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed and produced a 17-page PDF.
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed and produced the template-aligned PDF at that stage.
+- Secret scan passed: no real DeepSeek API key was written to tracked project files.
+
+## Stage 24 - Report narrative and layer explanation polish
+
+Commit message: `docs: polish report analysis and layer explanation`
+
+Completed scope:
+
+- Rewrite the report goal and deliverables sections into more continuous prose.
+- Expand the four-layer Guardian explanation with the design principle behind each layer:
+  - action boundary,
+  - tainted data flow,
+  - intent consistency,
+  - behavior sequence anomaly.
+- Add short code excerpts for the Guardian decision aggregation and TaintLayer fragment-flow judgment.
+- Expand the experimental analysis to explain what 22/22 detection does and does not prove.
+- Clarify that benign `FLAG` cases are non-blocking audit warnings rather than blocking false positives.
+- Add a representative-case table for tool hijack, indirect injection, sequence anomaly, and benign warning samples.
+- Rewrite the innovation and conclusion sections to reduce list-like phrasing.
+- Regenerate `report/final_report.pdf` as a 19-page PDF.
+- Update project overview and update log to match the new report page count.
+
+Validation:
+
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed twice.
+- Rendered pages 6-15 with Poppler and inspected the four-layer explanation, code snippets, result tables, and representative-case table.
 - Secret scan passed: no real DeepSeek API key was written to tracked project files.

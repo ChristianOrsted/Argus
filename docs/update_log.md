@@ -1,5 +1,22 @@
 # Argus Update Log
 
+## 2026-07-24 - Report Narrative And Four-Layer Explanation Polish
+
+本次报告润色：
+
+- 重写 `report/final_report.tex` 中“选题目标”和“作品成果”部分，减少清单式表达，改为更连贯地说明项目如何从红队样本、防御机制和网页验收形成闭环。
+- 深入扩写“四层行为监督机制”小节，解释四层为什么分别对应动作边界、数据来源、意图一致性和行为序列，而不是简单关键词堆叠。
+- 在报告中加入两段短代码节选：Guardian 四层 Verdict 聚合逻辑、Taint 层片段级污点流入高权限动作的判断逻辑。
+- 扩写实验分析，说明 22/22 检出只代表当前评测集上的结果，不等同于覆盖全部真实攻击；解释 2 条良性 `FLAG` 为什么属于旁路告警而非阻断型误报。
+- 新增代表性样本分析表，解释工具调用劫持、间接提示注入、序列异常和良性告警样本分别由哪些层命中、结果含义是什么。
+- 重写“创新性说明”和“总结”，减少“第一、第二、第三”的汇报腔，让语言更像完整报告正文。
+
+本次验证结果：
+
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 19 页 PDF。
+- 渲染检查通过：抽查第 6-15 页，四层表格、代码块、实验表格和代表性样本表均无溢出或遮挡。
+- 密钥扫描通过：未发现真实 DeepSeek API Key 写入项目文件。
+
 ## 2026-07-24 - Printable Dashboard, Tool Registry, And Template Report
 
 本次定稿前完善：
@@ -11,7 +28,7 @@
 - 新增 `tests/test_tool_registry.py`，验证工具注册表与策略白名单一致。
 - 新增 `docs/tool_onboarding_policy.md`，说明“工具集超出预设”当前是中等偏大的工程问题，本阶段已补工具能力登记入口，完整治理继续放在展望。
 - 按用户提供的夏季学期 Word 模板重写 `report/final_report.tex`，包含封面、填写说明、目录、摘要、五章正文、参考文献和附录。
-- 重新编译 `report/final_report.pdf`，当前为 17 页，保留实验结果和截图占位，并附上每张图应放什么内容的文字说明。
+- 重新编译 `report/final_report.pdf`，当前为 19 页，保留实验结果和截图占位，并附上每张图应放什么内容的文字说明。
 - 同步更新 `report/llm_security_argus_briefing.pptx` 中的平均审计延迟为最新 benchmark 结果 0.897ms。
 - 更新 `docs/project_overview.md` 和 `docs/project_self_audit.md`，同步当前验收数据、工具扩展结论和后续重点。
 
@@ -23,7 +40,7 @@
 - 单元测试通过：65 passed。
 - Benchmark 通过：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警。
 - 最新离线延时：平均 0.897ms，p50 0.875ms，p95 1.471ms。
-- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 17 页 PDF。
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 19 页 PDF。
 - 密钥扫描通过：未发现真实 DeepSeek API Key 写入项目文件。
 
 ## 2026-07-17 - Final Presentation Deck
