@@ -506,7 +506,7 @@ Completed scope:
   - quantified evaluation results,
   - Dashboard demo and acceptance flow,
   - limitations and future work.
-- Include final evaluation metrics in the deck: 30 total cases, 22 attacks, 22/22 detected, 0 blocking false positives, 1.049ms average audit latency.
+- Include final evaluation metrics in the deck: 30 total cases, 22 attacks, 22/22 detected, 0 blocking false positives, average audit latency shown in the deck.
 - Add future-work discussion for public attack-set integration and tool-set scaling beyond fixed presets.
 - Update `docs/project_overview.md` and `docs/update_log.md` to register the PPT deliverable.
 
@@ -515,3 +515,40 @@ Validation:
 - Generated the PPTX with `@oai/artifact-tool`.
 - Rendered the final PPTX to slide images and inspected all 9 slides.
 - `slides_test.py` passed with no overflow detected.
+
+## Stage 23 - Printable dashboard, tool registry, and template report
+
+Commit message: `docs: finalize printable report and tool registry`
+
+Completed scope:
+
+- Convert the Dashboard visual theme to a white-background, black-text presentation style for report screenshots and printing.
+- Add print-friendly CSS while preserving existing Dashboard workflows.
+- Add `src/guardian/tool_registry.py` to describe enabled tools with capability tags, risk levels, and audit focus areas.
+- Wire `PolicyLayer` to the tool registry so unknown tools remain blocked with a clearer onboarding explanation.
+- Add tests for tool-registry behavior.
+- Add `docs/tool_onboarding_policy.md` to clarify that tool-set scaling is a larger future-work item, with a small engineering bridge now implemented.
+- Rewrite `report/final_report.tex` according to the uploaded summer-term report template structure:
+  - cover page,
+  - filling instructions,
+  - table of contents,
+  - abstract,
+  - five report chapters,
+  - references,
+  - appendices.
+- Regenerate `report/final_report.pdf` as a 17-page template-aligned PDF.
+- Sync `report/llm_security_argus_briefing.pptx` average audit latency with the latest benchmark result.
+- Refresh `report/eval_results.md` and `report/eval_results.json` from the current benchmark run.
+- Update project overview, self-audit, and update log.
+
+Validation:
+
+- Dashboard foreground smoke test passed: `GET http://127.0.0.1:8765/` returned `200`.
+- Dashboard CSS smoke test confirmed `color-scheme: light`.
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 65 tests passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 30 total cases, 22/22 attacks detected, 0 blocking false positives, 2 benign flags.
+- Latest latency metrics: avg 0.897ms, p50 0.875ms, p95 1.471ms.
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed and produced a 17-page PDF.
+- Secret scan passed: no real DeepSeek API key was written to tracked project files.

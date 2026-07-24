@@ -1,12 +1,38 @@
 # Argus Update Log
 
+## 2026-07-24 - Printable Dashboard, Tool Registry, And Template Report
+
+本次定稿前完善：
+
+- 将 Dashboard 从深色主题切换为白底黑字浅色主题，并补充打印友好的样式，方便报告截图和纸质打印。
+- 保留原有 Dashboard 布局与交互，不改变攻击面复跑、DeepSeek 批量红队、规则管理、攻击链视图和一键验收功能。
+- 新增 `src/guardian/tool_registry.py`，为内置工具记录能力标签、风险等级和审计关注点。
+- `PolicyLayer` 从工具能力注册表读取当前启用工具；未知工具仍默认阻断，并提示新工具应先登记能力标签、最小权限和审计关注点。
+- 新增 `tests/test_tool_registry.py`，验证工具注册表与策略白名单一致。
+- 新增 `docs/tool_onboarding_policy.md`，说明“工具集超出预设”当前是中等偏大的工程问题，本阶段已补工具能力登记入口，完整治理继续放在展望。
+- 按用户提供的夏季学期 Word 模板重写 `report/final_report.tex`，包含封面、填写说明、目录、摘要、五章正文、参考文献和附录。
+- 重新编译 `report/final_report.pdf`，当前为 17 页，保留实验结果和截图占位，并附上每张图应放什么内容的文字说明。
+- 同步更新 `report/llm_security_argus_briefing.pptx` 中的平均审计延迟为最新 benchmark 结果 0.897ms。
+- 更新 `docs/project_overview.md` 和 `docs/project_self_audit.md`，同步当前验收数据、工具扩展结论和后续重点。
+
+本次验证结果：
+
+- 前端页面烟测通过：`GET http://127.0.0.1:8765/` 返回 `200`，`styles.css` 确认 `color-scheme: light`。
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：65 passed。
+- Benchmark 通过：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警。
+- 最新离线延时：平均 0.897ms，p50 0.875ms，p95 1.471ms。
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 17 页 PDF。
+- 密钥扫描通过：未发现真实 DeepSeek API Key 写入项目文件。
+
 ## 2026-07-17 - Final Presentation Deck
 
 本次新增汇报材料：
 
 - 新增 `report/llm_security_argus_briefing.pptx` 作为课程汇报 PPT。
 - PPT 共 9 页，结构为：选题与研究问题、攻击面、项目交付物、系统架构、四层 Guardian 机制、红队与 DeepSeek 在线样本、实验结果、网页演示验收、局限与展望。
-- 实验结果页写入当前定稿口径：30 条样本、22 条攻击样本、22/22 攻击检出、0 阻断型误报、平均审计延迟 1.049ms。
+- 实验结果页写入当时定稿口径：30 条样本、22 条攻击样本、22/22 攻击检出、0 阻断型误报、平均审计延迟 1.049ms；2026-07-24 已随最新 benchmark 同步为 0.897ms。
 - 展望页补充后续可深入方向：接入 AdvBench/JailbreakBench 等现有攻击集扩大测试，工具集超出预设时升级为工具能力标签、最小权限和场景策略。
 - 已使用演示文稿工具渲染最终 PPTX 并逐页检查；`slides_test.py` 检查通过，无元素越界。
 - 更新 `docs/project_overview.md`，将 PPT 标记为汇报交付物。

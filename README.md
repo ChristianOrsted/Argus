@@ -10,7 +10,7 @@
 
 ## 项目总览
 
-面向验收的总体说明见 [docs/project_overview.md](docs/project_overview.md)：包含项目目标、模块设计、交付物对应关系和验收命令。启动、关闭端口和 DeepSeek 在线演示排障见 [docs/operation_guide.md](docs/operation_guide.md)。
+面向验收的总体说明见 [docs/project_overview.md](docs/project_overview.md)：包含项目目标、模块设计、交付物对应关系和验收命令。启动、关闭端口和 DeepSeek 在线演示排障见 [docs/operation_guide.md](docs/operation_guide.md)。新增工具接入和“工具集超出预设”的处理口径见 [docs/tool_onboarding_policy.md](docs/tool_onboarding_policy.md)。
 
 ## 一句话定位
 

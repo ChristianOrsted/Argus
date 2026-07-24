@@ -16,11 +16,14 @@ from pathlib import Path
 from ..config import SANDBOX_DIR
 from .adaptive_rules import first_matching_adaptive_rule
 from .guardian import Action, Context, ToolCall, Verdict
+from .tool_registry import enabled_tool_names, get_tool_profile
 
 NAME = "policy"
 
-# 允许 Agent 使用的工具白名单；不在白名单中的工具会在真实执行前直接 BLOCK。
-ALLOWED_TOOLS = {"run_shell", "read_file", "write_file", "web_fetch"}
+# 允许 Agent 使用的工具白名单来自工具能力注册表。未知工具仍默认阻断，但注册表会
+# 记录每个工具的能力标签、风险等级和审计重点，便于后续从固定白名单过渡到
+# “工具能力标签 + 最小权限 + 场景策略”。
+ALLOWED_TOOLS = enabled_tool_names()
 
 # 危险 shell 命令模式（命中即拦截）。这些模式代表破坏、反弹 shell、下载执行和凭据读取。
 DANGEROUS_PATTERNS = [
@@ -175,7 +178,13 @@ class PolicyLayer:
 
         # 工具白名单
         if call.name not in ALLOWED_TOOLS:
-            return Verdict(NAME, Action.BLOCK, f"工具 {call.name!r} 不在白名单内")
+            return Verdict(
+                NAME,
+                Action.BLOCK,
+                f"工具 {call.name!r} 未在能力注册表中启用；新工具应先登记能力标签、最小权限和审计关注点",
+            )
+
+        tool_profile = get_tool_profile(call.name)
 
         if _mentions_exfiltration_or_hijack(ctx.user_request):
             return Verdict(NAME, Action.BLOCK, "用户请求包含外联/删除数据库等工具劫持意图")
@@ -188,7 +197,8 @@ class PolicyLayer:
             cmd = _shell_payload(call.input)
             for pattern, desc in DANGEROUS_PATTERNS:
                 if pattern.search(cmd):
-                    return Verdict(NAME, Action.BLOCK, f"危险命令：{desc}")
+                    risk = f"，工具风险等级：{tool_profile.risk}" if tool_profile else ""
+                    return Verdict(NAME, Action.BLOCK, f"危险命令：{desc}{risk}")
 
         if call.name == "web_fetch":
             url = _url_payload(call.input)

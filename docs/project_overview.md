@@ -1,6 +1,6 @@
 # Argus 项目总览与验收说明
 
-更新日期：2026-07-17
+更新日期：2026-07-24
 
 ## 1. 选题确认
 
@@ -207,7 +207,7 @@ Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求
 - `operation_guide.md`：Dashboard 启停、端口释放、DeepSeek 在线演示和排障操作指导。
 - `project_overview.md`：总体性说明和验收指南。
 - `final_report.tex`：课程正式 LaTeX 报告，包含风险分析、系统设计、实验结果和截图占位说明。
-- `final_report.pdf`：由 LaTeX 编译出的 13 页报告预览版。
+- `final_report.pdf`：按夏季学期报告模板编译出的 17 页 PDF 预览版，保留截图占位说明。
 - `llm_security_argus_briefing.pptx`：9 页课程汇报 PPT，覆盖研究问题、系统方案、实验结果、演示验收和后续展望。
 - `final_report.md`：早期课程报告草稿。
 - `eval_results.md`：自动生成的评测结果。
@@ -265,7 +265,7 @@ cd E:\eve_jump\暑期课程\Argus
 当前验证结果：
 
 ```text
-56 passed
+65 passed
 ```
 
 ### 5.3 跑离线原型演示
@@ -310,10 +310,10 @@ sandbox_runs/audit/offline_demo.jsonl
 
 当前评测结果：
 
-- 总样本：16
-- 攻击样本：10
-- 良性样本：6
-- 攻击检出：10/10
+- 总样本：30
+- 攻击样本：22
+- 良性样本：8
+- 攻击检出：22/22
 - 阻断型误报：0
 - Recall：100.00%
 - False positive rate：0.00%
@@ -508,6 +508,18 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 一键演示接口：`POST /api/demo-run` 返回 7 个攻击面，7/7 检出
 - 演示产物链接：`/artifacts/demo_acceptance/argus_demo_*.svg` 和 `.md` 均返回 `200`
 
+2026-07-24 白底前端、工具能力注册表和模板化报告更新后已重新验证：
+
+- `node --check dashboard\app.js`：通过
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `.\.venv\Scripts\python -m pytest`：65 passed
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警
+- 最新离线平均审计延时：0.897ms，p50 0.875ms，p95 1.471ms
+- Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
+- 前端样式烟测：`dashboard/styles.css` 已切换到 `color-scheme: light`
+- LaTeX 报告编译：`report/final_report.pdf` 生成 17 页 PDF
+- 密钥扫描：未发现真实 DeepSeek API Key 写入项目文件
+
 ## 7. 后续还能增强什么
 
 如果还有时间，可以继续增强：
@@ -515,6 +527,7 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 录制一次 Dashboard 完整演示视频，覆盖 7 个攻击面。
 - 把 DeepSeek 在线生成的真实攻击样本落成可复现的 jsonl 数据集。
 - 增加 30-50 条公开越狱样本转换结果，并在报告中做扩展评测。
+- 将新工具接入从当前工具能力注册表继续扩展为能力标签、最小权限、场景策略和旁路观察流程。
 - 给评测结果增加图表。
 - 给 Dashboard 历史库增加导出 CSV 报告按钮，便于演示后复盘。
 - 给每条漏拦截分析增加“规则差异预览”，方便课堂演示时解释规则如何演进。
