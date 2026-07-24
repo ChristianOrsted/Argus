@@ -27,12 +27,24 @@ class ToolCall:
 
 
 @dataclass
+class TaintedFragment:
+    """来自不可信工具输出的文本片段。"""
+
+    source: str                     # 来源工具，如 web_fetch / read_file
+    text: str                       # 被标记的具体片段
+    digest: str = ""                # 片段摘要，便于审计时引用
+    origin_tool_use_id: str = ""    # 产生该片段的工具调用 id
+
+
+@dataclass
 class Context:
     """本轮会话上下文，供各层判断使用。"""
 
     user_request: str                         # 用户最初的真实指令
     history: list[ToolCall] = field(default_factory=list)   # 已发生的工具调用序列
     tainted_sources: set[str] = field(default_factory=set)  # 已知的污点来源标记（见 taint 层）
+    tainted_fragments: list[TaintedFragment] = field(default_factory=list)  # 片段级污点
+    metadata: dict[str, Any] = field(default_factory=dict)  # 红队/前端传入的结构化上下文
 
 
 @dataclass

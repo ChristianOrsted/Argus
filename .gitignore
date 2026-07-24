@@ -1,6 +1,3 @@
-# ---- Docs ----
-docs/
-
 # ---- Secrets ----
 .env
 *.key
@@ -28,6 +25,8 @@ htmlcov/
 
 # ---- Data (大文件不入库；放说明文件指明下载方式) ----
 datasets/*.jsonl
+!datasets/seed_cases.jsonl
+!datasets/public_jailbreak_seed.jsonl
 datasets/raw/
 sandbox_runs/
 *.log

@@ -8,6 +8,10 @@
 
 ---
 
+## 项目总览
+
+面向验收的总体说明见 [docs/project_overview.md](docs/project_overview.md)：包含项目目标、模块设计、交付物对应关系和验收命令。启动、关闭端口和 DeepSeek 在线演示排障见 [docs/operation_guide.md](docs/operation_guide.md)。
+
 ## 一句话定位
 
 一个**旁路部署的智能体行为监督器（Guardian）**：夹在 LLM Agent 与它的工具（shell / 文件读写 / 联网）之间，对每一次**工具调用、代码执行、文件访问**做实时审计 → 异常检测 → 拦截 / 告警。红队造攻击，蓝队做防御，形成闭环。
@@ -54,22 +58,42 @@ python -m venv .venv
 # 2. 装依赖
 pip install -r requirements.txt
 
-# 3. 配置 API Key（复制模板后填入自己的 key）
+# 3. 先跑离线 demo（不需要 API Key）
+python scripts\offline_demo.py
+
+# 4. 配置 DeepSeek API Key（复制模板后填入自己的 key）
 Copy-Item .env.example .env
-#   然后编辑 .env，填 ANTHROPIC_API_KEY=sk-ant-...
+#   然后编辑 .env，填 DEEPSEEK_API_KEY=sk-...
 
-# 4. 跑 demo（让 Agent 在 Guardian 监督下执行一个任务）
-python -m scripts.demo
+# 5. 跑 DeepSeek 在线 demo（让 Agent 在 Guardian 监督下执行一个任务）
+python scripts\deepseek_demo.py
 
-# 5. 跑测试
+# 6. 复现单个红队用例 / 跑离线评测
+python scripts\replay_case.py ii-001
+python scripts\run_benchmark.py
+
+# 7. 转换公开越狱集样例
+python scripts\convert_public_jailbreaks.py datasets\public_samples\advbench_sample.csv datasets\public_jailbreak_seed.jsonl --source advbench
+
+# 8. 启动网页 Dashboard：攻击面实验台 + DeepSeek 在线红队
+python scripts\dashboard_server.py
+
+# 9. 跑测试
 pytest
 ```
 
 ## 技术栈
 
 - Python 3.10+
-- [Anthropic SDK](https://pypi.org/project/anthropic/)（Claude API，模型默认 `claude-opus-4-8`，可在 `.env` 里改）
+- DeepSeek OpenAI-compatible API（默认模型 `deepseek-chat`，可在 `.env` 里改）
+- [Anthropic SDK](https://pypi.org/project/anthropic/)（保留旧版 Claude demo 兼容入口）
 - `rich`（终端审计看板）、`pytest`
+
+Dashboard 固定端口为 `http://127.0.0.1:8765`。页面支持 7 个独立攻击面离线重跑、DeepSeek 批量红队生成、可编辑红队提示词、总/四层状态矩阵、DeepSeek 期望阻断兜底、漏拦截红色标记、漏拦截分析与自适应规则同步、持久历史审计流和动态四层防御统计；Key 只用于本地请求，不会写入项目文件。
+
+如果网页端 DeepSeek 调用出现 Windows `WinError 10013`，说明启动 `dashboard_server.py` 的 Python 进程没有出站网络权限；请从有网络权限的终端重新启动 Dashboard，或在防火墙/安全软件中允许 Python 访问 `https://api.deepseek.com`。
+
+完整端口操作命令见 [docs/operation_guide.md](docs/operation_guide.md)。
 
 ## 路线图（4 周）
 

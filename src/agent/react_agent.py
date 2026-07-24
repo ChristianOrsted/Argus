@@ -12,6 +12,7 @@ import anthropic
 
 from ..config import AGENT_MODEL
 from ..guardian.guardian import Action, Context, Guardian, ToolCall
+from ..guardian.taint import register_tool_output_taint
 from .tools import TOOLS, UNTRUSTED_SOURCE_TOOLS, execute_tool
 
 DEFAULT_SYSTEM = "You are a helpful assistant with access to shell, file, and web tools."
@@ -78,7 +79,7 @@ class ReActAgent:
                 output = execute_tool(call.name, call.input)
                 # 工具返回若来自不可信源，登记污点（供第 2 层使用）
                 if call.name in UNTRUSTED_SOURCE_TOOLS:
-                    ctx.tainted_sources.add(call.name)
+                    register_tool_output_taint(ctx, call, output)
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": block.id,
