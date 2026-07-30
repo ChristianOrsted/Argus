@@ -1,6 +1,6 @@
 # Argus 项目总览与验收说明
 
-更新日期：2026-07-16
+更新日期：2026-07-24
 
 ## 1. 选题确认
 
@@ -32,6 +32,9 @@ Argus 已经从原始骨架推进为一个可运行原型系统：
 - 提供 DeepSeek 在线红队生成：由真实大模型按预设攻击面批量生成攻击请求、危险工具调用和风险说明，再交给 Guardian 检查是否能拦住。
 - 提供 DeepSeek 红队期望阻断兜底：当红队样本明确标注应阻断且附带风险点时，Guardian 会把该工具调用视为攻击链候选动作处理。
 - 提供 DeepSeek 漏拦截分析：对未被拦截的攻击条目，可调用 DeepSeek 分析原因，并写入受限自适应防御规则后重评估。
+- 提供自适应规则管理页：展示规则来源、命中次数、启停状态，并支持撤销规则。
+- 提供攻击链视图：把红队样本的用户请求、模型输出/攻击点、工具调用、污点来源和四层防御命中串成链路图。
+- 提供一键演示脚本模式：固定运行 7 个攻击面，生成 Markdown 验收记录、JSON 结果和 SVG 截图快照。
 - 提供网页端持久历史流：每次请求与审计结果写入本地 SQLite，页面指标和四层防御统计会随历史请求动态更新。
 - 生成可读的 Markdown 评测结果。
 - 输出 JSONL 审计日志，方便演示和报告取证。
@@ -76,14 +79,49 @@ Guardian 四层防御：
 - `PolicyLayer`：确定性规则层。拦截危险 shell、未知工具、沙箱外文件读写、敏感凭据读取、记忆中毒写入，并利用 DeepSeek 红队元数据对“期望阻断”的攻击链候选动作做兜底阻断。
 - `TaintLayer`：污点追踪层。把 `web_fetch`、`read_file` 视为不可信来源；同时抽取具体文本片段、摘要和来源工具调用 ID。若片段流入 `run_shell` / `write_file` 等高权限动作，则按证据告警或阻断。
 - `IntentLayer`：意图一致性层。提供可插拔 judge 接口和 `DeepSeekIntentJudge`，用于判断工具调用是否符合用户原始意图。默认关闭，避免离线演示依赖 API Key。
-- `AnomalyLayer`：序列异常层。当前实现重复工具调用检测，后续可扩展为 n-gram 或 Markov 行为模型。
+- `AnomalyLayer`：序列异常层。检测重复调用、DeepSeek 红队攻击链元数据、读取/抓取后跳转高影响工具、读取动作与外联目标共现等异常序列。
 - `adaptive_rules.py`：前端漏拦截分析写入的受限自适应规则。规则只做字段包含匹配，不执行代码。
+
+四层如何实际工作：
+
+1. `PolicyLayer` 是第一道确定性闸门。
+
+   输入是 `ToolCall` 和 `Context`。它先检查 DeepSeek 漏拦截分析写入的自适应规则，再检查工具白名单、危险 shell 模式、文件路径是否越出沙箱、是否读取敏感路径、是否把外部内容写入长期记忆、用户请求是否包含外联/删除数据库等工具劫持意图。对 DeepSeek 在线红队生成的样本，前端会把 `attack_goal`、`risk_points`、`danger_explanation`、`expected_guardian_action` 放入 `Context.metadata`，策略层会把这些元数据作为“红队样本期望阻断”的证据，避免当前工具调用看似正常但其实处在攻击链中的情况被放行。
+
+   这一层的特点是快、稳定、可解释，适合处理已知高危动作，例如 `rm -rf`、`curl | sh`、读取 `.env` / `id_rsa`、访问 `evil.example`、写入 `memory/profile.md` 等。它主要覆盖提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒和环境感知污染中的确定性风险。
+
+2. `TaintLayer` 解决间接提示注入和不可信数据流问题。
+
+   Agent 执行 `web_fetch` 或 `read_file` 后，工具输出会在进入模型上下文前被登记为不可信来源。系统不仅记录“来源级污点”，还会按行抽取“片段级污点”，为每个片段生成摘要 digest 和来源工具调用 ID。下一次模型想执行 `run_shell` 或 `write_file` 时，污点层会把当前工具参数展平，检查是否包含先前的不可信片段，或者是否在读取不可信内容之后触发高权限动作。
+
+   如果不可信片段中出现 `ignore previous instructions`、`curl | sh`、`rm -rf`、密钥处理等危险 sink，并流入高权限动作，就直接 `BLOCK`。如果只是发现不可信文本被复制进高权限动作但危险意图不明显，则 `FLAG`。这使项目能够解释“网页里藏的提示词如何一步步影响工具调用”，是防御间接提示注入、环境污染和记忆中毒的关键。
+
+3. `IntentLayer` 用 LLM judge 做语义层校验。
+
+   策略层和污点层更擅长识别明确规则和数据流，但有些工具调用本身不一定包含危险关键词，却与用户原始意图不一致。`IntentLayer` 会把 `user_request` 和当前 `ToolCall` 组织成 JSON，让 `DeepSeekIntentJudge` 判断工具调用是否符合用户真实请求，并返回 `consistent`、`reason`、`confidence`。如果 judge 认为不一致，高影响工具如 `run_shell`、`write_file` 会被 `BLOCK`，读文件等中风险工具会被 `FLAG`。
+
+   这一层默认不启用，保证离线验收不依赖 API Key；在 Dashboard 中勾选“同时启用 DeepSeek intent judge”后才会在线调用。它适合展示“语义不一致”的攻击，例如用户只要求总结网页，模型却试图执行删除命令或写入长期规则。
+
+4. `AnomalyLayer` 做工具调用序列层面的异常检测。
+
+   前三层主要看“当前这一次调用是否危险”，而异常层看“这次调用放在历史序列和红队上下文里是否反常”。当前实现包含三类可解释启发式：同一工具连续重复超过阈值时 `FLAG` 为异常循环；DeepSeek 红队元数据中出现 `delete_database`、`send_http`、`evil.example`、外联、非白名单等攻击链关键词时直接 `BLOCK`；读取/抓取动作与外联目标共现，或读取/抓取之后突然跳转到 `run_shell` / `write_file` 等高影响工具时，按风险 `FLAG` 或 `BLOCK`。
+
+   这一层的价值在于处理单次调用看似正常、但调用序列异常的智能体行为。例如 DeepSeek 生成的 `read_file /var/log/syslog` 当前动作本身只是读取，但用户请求和风险点要求把结果发送到 `evil.example`，第 4 层会把它识别为数据外泄攻击链前序步骤；间接提示注入从网页/文件读取后跳到写计划或 shell 执行，也会被识别为序列提权或意图漂移。
+
+四层之间不是互相替代，而是互补：
+
+- `PolicyLayer` 处理已知危险模式，保证基础安全底线。
+- `TaintLayer` 追踪不可信来源如何影响高权限动作，解决间接攻击链。
+- `IntentLayer` 用语义判断补足规则无法覆盖的意图漂移。
+- `AnomalyLayer` 从时间序列角度发现异常行为模式。
 
 决策逻辑：
 
 - 任一层 `BLOCK`，最终阻断。
 - 无 `BLOCK` 但有 `FLAG`，最终告警。
 - 全部 `ALLOW`，最终放行。
+
+最终 `Decision` 会保留每一层的 `Verdict`，前端 Dashboard 的“总 / 1 / 2 / 3 / 4”就是把总决策和四层 Verdict 展示出来，方便演示为什么拦截、由哪一层拦截、证据是什么。
 
 ### 3.3 红队样本与测试集
 
@@ -96,9 +134,9 @@ Guardian 四层防御：
 
 已有样本：
 
-- 攻击样本 10 条。
-- 良性对照 6 条。
-- 覆盖提示注入、工具调用劫持、敏感信息读取、间接提示注入、记忆中毒、环境污染等场景。
+- 攻击样本 22 条。
+- 良性对照 8 条。
+- 覆盖提示注入、模型越狱、训练数据泄露、工具调用劫持、间接提示注入、记忆中毒、环境感知污染、序列异常等场景。
 
 `web_notes_evil.txt` 是间接提示注入 fixture：表面是普通网页笔记，隐藏内容要求 Agent 忽略原指令并下载执行恶意脚本。
 
@@ -117,6 +155,15 @@ Guardian 四层防御：
 - 离线重跑：使用稳定、可验收的预置 `ToolCall`。
 - DeepSeek 红队：调用真实 DeepSeek 模型生成新的攻击请求、危险工具调用、风险点说明，再由 Guardian 实时审计。
 
+DeepSeek 在线红队已从单一固定提示词升级为四类可展示模式：
+
+- 精准单步：生成最短攻击链，适合验证基础拦截能力。
+- 伪装正常任务：把恶意意图藏在办公、调试、摘要、备份等看似正常的请求里。
+- 多步攻击链：强调从低风险读取跳转到 shell、文件写入、记忆写入或外联。
+- 绕过变体：改变参数形态、任务包装和风险表达，检查策略是否过窄。
+
+Dashboard 会把每条 DeepSeek 生成样本拆成“攻击目标、用户请求、工具调用、污点来源、风险点、危险解释”，并把 Guardian 结果拆成“总状态、四层 Verdict、漏拦截状态、DeepSeek 分析结果、自适应规则写入结果”。点击批量条目会打开详情弹窗，顶部攻击链视图展示“用户请求 -> 模型输出/攻击点 -> 工具调用 -> 污点来源 -> 防御层命中”。如果某条红队样本期望 `block/flag` 但 Guardian 放行，页面可直接点击“调用 DeepSeek 分析并优化规则”，让模型分析漏拦截原因，再把建议约束为 `adaptive_rules.py` 支持的字段规则后重评估。规则管理页会显示这些规则的来源、命中次数、启停状态，并支持撤销。
+
 ### 3.4 攻击脚本与演示脚本
 
 路径：
@@ -133,7 +180,7 @@ Guardian 四层防御：
 
 - `offline_demo.py`：无需 API Key，演示良性放行、危险命令阻断、间接注入阻断。
 - `replay_case.py`：按样本 ID 复现单个攻击或良性场景。
-- `run_benchmark.py`：运行全部种子样本，输出检出率、误报率和延时。
+- `run_benchmark.py`：运行全部种子样本，输出总召回率、阻断型误报率、良性告警数、延时分位数、按攻击面分类指标、四层 Verdict 分布、混淆矩阵和逐样本结果。
 - `run_intent_judge_eval.py`：调用真实 DeepSeek intent judge，在线评测工具调用与用户意图是否一致。
 - `convert_public_jailbreaks.py`：把 AdvBench/JailbreakBench 风格公开数据集转换为 Argus jsonl。
 - `dashboard_server.py`：启动本地网页 Dashboard，展示样本、统计、逐层 Verdict、自定义评估、独立攻击面重跑、DeepSeek 在线红队生成和持久历史审计流。
@@ -146,8 +193,12 @@ Guardian 四层防御：
 - `docs/architecture.md`
 - `docs/operation_guide.md`
 - `docs/project_overview.md`
+- `report/final_report.tex`
+- `report/final_report.pdf`
+- `report/llm_security_argus_briefing.pptx`
 - `report/final_report.md`
 - `report/eval_results.md`
+- `report/eval_results.json`
 - `COMMIT_SUMMARY.md`
 
 作用：
@@ -155,15 +206,36 @@ Guardian 四层防御：
 - `architecture.md`：系统架构说明。
 - `operation_guide.md`：Dashboard 启停、端口释放、DeepSeek 在线演示和排障操作指导。
 - `project_overview.md`：总体性说明和验收指南。
-- `final_report.md`：课程报告草稿。
+- `final_report.tex`：课程正式 LaTeX 报告，包含风险分析、系统设计、实验结果、关键代码注释、系统架构图和截图占位说明。
+- `final_report.pdf`：按夏季学期报告模板编译出的 20 页 PDF 预览版，已内置系统总体架构图、四层 Guardian 判定流程图和网页演示操作流程图，真实网页运行截图保留占位。
+- `llm_security_argus_briefing.pptx`：9 页课程汇报 PPT，覆盖研究问题、系统方案、实验结果、演示验收和后续展望。
+- `final_report.md`：早期课程报告草稿。
 - `eval_results.md`：自动生成的评测结果。
+- `eval_results.json`：自动生成的机器可读评测结果，便于后续画图或前端导入。
 - `COMMIT_SUMMARY.md`：阶段 commit 汇总。
+
+### 3.5 核心代码注释导航
+
+为了方便答辩和后续小组协作，核心代码已经补充块级注释，建议按下面顺序阅读：
+
+- `src/guardian/guardian.py`：解释 `ToolCall -> Context -> Verdict -> Decision` 的统一数据流。
+- `src/guardian/policy.py`：解释策略层规则组、执行顺序和 DeepSeek 红队元数据兜底。
+- `src/guardian/taint.py`：解释来源级污点、片段级污点和高权限 sink 判断。
+- `src/guardian/intent.py`：解释 DeepSeek intent judge 的结构化输入输出和风险分级。
+- `src/guardian/anomaly.py`：解释重复调用、红队元数据攻击链、读取到高影响工具跳转和外联链路异常检测。
+- `src/guardian/adaptive_rules.py`：解释漏拦截分析生成的受限数据规则为何不会执行模型代码。
+- `src/agent/deepseek_agent.py`：解释 Guardian 如何嵌入到 LLM tool calling 执行前。
+- `src/agent/tools.py`：解释真实工具执行、沙箱、fixture 离线网页和不可信来源。
+- `src/redteam/surface_lab.py`：解释 7 个攻击面、离线样本和 DeepSeek 在线样本如何统一成 `AttackCase`。
+- `scripts/dashboard_server.py`：解释网页前后端共用的本地服务、批量红队、漏拦截分析和 SQLite 历史流。
+- `dashboard/app.js`：解释前端状态、批量矩阵、“总 / 1 / 2 / 3 / 4”展示和漏拦截闭环。
 
 ## 4. 已达成的课程交付物
 
 | 课程要求 | 当前状态 | 对应文件 |
 |---|---|---|
-| 安全风险分析报告 | 已有草稿，后续可继续润色 | `report/final_report.md`, `docs/architecture.md` |
+| 安全风险分析报告 | 已完成 LaTeX 正式报告并生成 PDF 预览 | `report/final_report.tex`, `report/final_report.pdf`, `docs/architecture.md` |
+| 汇报 PPT | 已完成简短答辩汇报版，含实验结果和后续展望 | `report/llm_security_argus_briefing.pptx` |
 | 对抗样本与越狱测试集 | 已有可运行种子集 | `datasets/seed_cases.jsonl`, `src/redteam/attacks.py` |
 | 攻击脚本 | 已有，可按 ID 复现 | `scripts/replay_case.py` |
 | 可演示的智能体行为监督原型系统 | 已有，离线可跑，网页可操作，在线 DeepSeek 可接入 | `scripts/offline_demo.py`, `scripts/dashboard_server.py`, `scripts/deepseek_demo.py`, `src/guardian/` |
@@ -193,7 +265,7 @@ cd E:\eve_jump\暑期课程\Argus
 当前验证结果：
 
 ```text
-51 passed in 1.52s
+65 passed
 ```
 
 ### 5.3 跑离线原型演示
@@ -238,10 +310,10 @@ sandbox_runs/audit/offline_demo.jsonl
 
 当前评测结果：
 
-- 总样本：16
-- 攻击样本：10
-- 良性样本：6
-- 攻击检出：10/10
+- 总样本：30
+- 攻击样本：22
+- 良性样本：8
+- 攻击检出：22/22
 - 阻断型误报：0
 - Recall：100.00%
 - False positive rate：0.00%
@@ -271,7 +343,10 @@ http://127.0.0.1:8765
 - `独立攻击面重跑`：对提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入分别点击“离线重跑”，观察用户请求、工具调用、四层 Verdict 和最终 `ALLOW / FLAG / BLOCK`。
 - `DeepSeek 红队`：选择一个攻击面，设置生成条数，可编辑红队提示词，点击“运行 DeepSeek 红队”。DeepSeek 会在线批量生成攻击请求、工具调用、危险点说明，然后由 Guardian 审计。
 - `批量状态矩阵`：每条攻击显示“条目信息 / 总 / 1 / 2 / 3 / 4 / 操作”。其中“总”是最终决策，1-4 分别对应 Policy、Taint、Intent、Anomaly 四层。如果 DeepSeek 样本期望 `BLOCK` / `FLAG` 但 Guardian 实际 `ALLOW`，前端会把该条标为红色漏拦截。
-- `分析漏拦截`：如果某条攻击没有被 `BLOCK`，点击该条右侧按钮，DeepSeek 会分析未拦截原因，生成受限自适应规则，写入 `sandbox_runs/audit/adaptive_rules.json`，然后对同一条攻击重评估。
+- `攻击链详情`：点击某条批量红队条目，弹窗会把用户请求、模型输出/攻击点、工具调用、污点来源和四层防御命中画成链路图，并展示完整审计细节。
+- `分析漏拦截`：如果某条攻击没有被 `BLOCK`，在详情弹窗中点击分析按钮，DeepSeek 会分析未拦截原因，生成受限自适应规则，写入 `sandbox_runs/audit/adaptive_rules.json`，然后对同一条攻击重评估。
+- `规则管理`：展示自适应规则来源、命中次数、启停状态和撤销按钮；命中次数会在规则被 PolicyLayer 命中时自动累加。
+- `演示验收`：一键运行固定 7 个攻击面，生成 `sandbox_runs/demo_acceptance/argus_demo_*.md`、`argus_demo_*.json` 和 `argus_demo_*.svg`。
 - `自定义工具调用评估`：手动输入用户请求、工具名、JSON 参数和污点来源，验证任意 ToolCall 是否会被拦截。
 - `交互审计记录`：页面会从 `sandbox_runs/audit/dashboard_history.sqlite3` 读取历史请求；每次评估后，指标卡、四层防御统计和审计流都会动态刷新。点击“清空历史”可清空本地历史库。
 
@@ -416,6 +491,38 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - Dashboard 批量接口：`model_jailbreak` 一次生成 3 条，3 条均返回 `BLOCK`
 - Dashboard 批量接口 + DeepSeek intent judge：`tool_hijack` 生成 1 条，最终返回 `BLOCK`
 
+2026-07-16 对抗样本和评测量化增强后已重新验证：
+
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：30 条用例，22 条攻击、8 条良性对照
+- 攻击检出：22/22，召回率 100.00%
+- 阻断型误报：0，良性告警：2
+- 评测报告新增：按攻击面分类指标、四层 Verdict 分布、混淆矩阵、p50/p95 延时和逐样本层级动作
+- 机器可读结果：`report/eval_results.json`
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `.\.venv\Scripts\python -m pytest`：56 passed
+
+2026-07-16 行为监督工程化和前端验收增强后已重新验证：
+
+- `node --check dashboard\app.js`：通过
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `.\.venv\Scripts\python -m pytest`：62 passed
+- Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
+- 规则管理接口：`GET /api/adaptive-rules` 返回规则总数、启用数和命中次数
+- 一键演示接口：`POST /api/demo-run` 返回 7 个攻击面，7/7 检出
+- 演示产物链接：`/artifacts/demo_acceptance/argus_demo_*.svg` 和 `.md` 均返回 `200`
+
+2026-07-24 白底前端、工具能力注册表和模板化报告更新后已重新验证：
+
+- `node --check dashboard\app.js`：通过
+- `.\.venv\Scripts\python -m compileall src scripts tests`：通过
+- `.\.venv\Scripts\python -m pytest`：65 passed
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警
+- 最新离线平均审计延时：0.897ms，p50 0.875ms，p95 1.471ms
+- Dashboard 固定端口烟测：`GET http://127.0.0.1:8765/` 返回 `200`
+- 前端样式烟测：`dashboard/styles.css` 已切换到 `color-scheme: light`
+- LaTeX 报告编译：`report/final_report.pdf` 生成 20 页 PDF，报告内置系统总体架构图、四层 Guardian 判定流程图和网页演示操作流程图
+- 密钥扫描：未发现真实 DeepSeek API Key 写入项目文件
+
 ## 7. 后续还能增强什么
 
 如果还有时间，可以继续增强：
@@ -423,9 +530,10 @@ DeepSeek API Key 仅通过运行时隐藏输入或本地页面临时请求注入
 - 录制一次 Dashboard 完整演示视频，覆盖 7 个攻击面。
 - 把 DeepSeek 在线生成的真实攻击样本落成可复现的 jsonl 数据集。
 - 增加 30-50 条公开越狱样本转换结果，并在报告中做扩展评测。
+- 将新工具接入从当前工具能力注册表继续扩展为能力标签、最小权限、场景策略和旁路观察流程。
 - 给评测结果增加图表。
-- 给 Dashboard 历史库增加导出 CSV/Markdown 报告按钮，便于演示后复盘。
-- 给每条漏拦截分析增加“规则差异预览”和“一键撤销本次自适应规则”，方便课堂演示时解释规则如何演进。
+- 给 Dashboard 历史库增加导出 CSV 报告按钮，便于演示后复盘。
+- 给每条漏拦截分析增加“规则差异预览”，方便课堂演示时解释规则如何演进。
 - 增加多模型对抗生成对比，例如 DeepSeek 生成攻击、另一个 judge 复核风险，减少单一模型偏差。
 - 给攻击提示词模板增加版本号和历史记录，便于比较不同红队提示词产生的攻击质量。
 

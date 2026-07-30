@@ -1,7 +1,15 @@
 """Guardian 核心：共享数据类型 + 四层编排器。
 
-设计见 docs/architecture.md 第 3 节。每一层实现 `Layer.check(call, ctx) -> Verdict`，
-Guardian 汇总所有层的 Verdict 得到最终 Decision。
+本文件是四层防御的公共接口层，不直接写具体安全规则，而是定义整个项目中
+“一次工具调用如何被审计”的数据结构：
+
+1. Agent 产生 `ToolCall`；
+2. 调用前上下文被整理为 `Context`；
+3. Policy/Taint/Intent/Anomaly 四层分别返回 `Verdict`；
+4. `Guardian.evaluate` 汇总为最终 `Decision`。
+
+这样做的好处是各层可以独立演进，但前端、测试、日志和 Agent 接入点都只依赖
+这一套稳定协议。设计见 docs/architecture.md 和 docs/project_overview.md。
 """
 
 from __future__ import annotations
@@ -38,7 +46,14 @@ class TaintedFragment:
 
 @dataclass
 class Context:
-    """本轮会话上下文，供各层判断使用。"""
+    """本轮会话上下文，供各层判断使用。
+
+    `Context` 是四层共享的信息总线：
+    - PolicyLayer 读取 user_request / metadata 判断确定性风险；
+    - TaintLayer 读取 tainted_sources / tainted_fragments 做数据流判断；
+    - IntentLayer 使用 user_request 和当前 ToolCall 做语义一致性判断；
+    - AnomalyLayer 使用 history 判断序列是否异常。
+    """
 
     user_request: str                         # 用户最初的真实指令
     history: list[ToolCall] = field(default_factory=list)   # 已发生的工具调用序列
@@ -80,7 +95,12 @@ class Layer(Protocol):
 
 
 class Guardian:
-    """编排四层防御，汇总成最终 Decision。"""
+    """编排四层防御，汇总成最终 Decision。
+
+    Guardian 本身不关心某条规则如何写，只负责保证所有层都被调用，并把
+    BLOCK / FLAG / ALLOW 的优先级统一起来。这也是 Dashboard 可以展示
+    “总 / 1 / 2 / 3 / 4”的原因。
+    """
 
     def __init__(self, layers: list[Layer]):
         self.layers = layers

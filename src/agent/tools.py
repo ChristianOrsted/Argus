@@ -18,6 +18,7 @@ MAX_FILE_BYTES = 64 * 1024
 MAX_LIST_ENTRIES = 500
 
 # ---- 给 Claude 的工具 schema（messages.create 的 tools 参数）----
+# 这些 schema 描述 Agent 能“提出”的工具调用；是否真正执行由 Guardian 决定。
 TOOLS = [
     {
         "name": "run_shell",
@@ -141,6 +142,7 @@ def execute_tool(name: str, tool_input: dict) -> str:
         endpoint = validate_web_url(url_value)
         url = endpoint.url
         if url.startswith("fixture://"):
+            # 离线 fixture 让课程演示不依赖真实恶意网页，也便于稳定测试。
             fixture_name = url.removeprefix("fixture://").lstrip("/\\")
             return _read_confined_text(fixture_name, root=FIXTURE_DIR)
         return fetch_public_text(url)

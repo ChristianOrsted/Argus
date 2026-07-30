@@ -346,3 +346,255 @@ Validation:
 
 - Documentation-only change.
 - Secret scan passed: no real API key was written to tracked files.
+
+## Stage 16 - Four-layer explanation and code comments
+
+Commit message: `docs: explain guardian layers and annotate code`
+
+Completed scope:
+
+- Expand `docs/project_overview.md` with a deeper explanation of how Policy, Taint, Intent, and Anomaly layers work.
+- Add a code-comment navigation section to `project_overview` for the main Guardian, Agent, red-team, Dashboard, and frontend files.
+- Add explanatory block comments and docstrings to the four Guardian layers and shared data flow.
+- Annotate the Agent tool-calling checkpoint, tool execution layer, red-team attack-surface lab, dashboard API service, audit logging, and frontend batch matrix.
+- Keep comments focused on code-block responsibilities and project architecture rather than line-by-line noise.
+
+Validation:
+
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed.
+- `node --check dashboard\app.js` passed.
+- Secret scan passed: no real API key was written to tracked files.
+
+## Stage 17 - Adversarial dataset and quantified evaluation
+
+Commit message: `feat: expand adversarial evaluation metrics`
+
+Completed scope:
+
+- Expand the offline evaluation corpus to 29 cases: 21 attacks and 8 benign controls.
+- Add coverage for model jailbreak, expanded training-data leakage, tool-hijack exfiltration, memory-poisoning URL chains, environment-pollution shell chains, and sequence anomaly.
+- Add benign controls for non-blocking taint warnings and below-threshold repeated reads.
+- Sync `datasets/seed_cases.jsonl` with `src/redteam/attacks.py`.
+- Add tests to ensure seed jsonl IDs match Python `EVAL_CASES`.
+- Harden PolicyLayer against PowerShell encoded command jailbreak variants.
+- Extend benchmark output with category metrics, layer verdict distribution, confusion matrix, benign flag counts, p50/p95 latency, per-case layer actions, and JSON export.
+- Make `scripts/run_benchmark.py` write both `report/eval_results.md` and `report/eval_results.json`.
+
+Validation:
+
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 29 total cases, 21/21 attacks detected, 0 blocking false positives, 2 benign flags.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 56 tests passed.
+- Secret scan passed: no real API key was written to tracked files.
+
+## Stage 18 - DeepSeek red-team UX and prompt modes
+
+Commit message: `feat: improve deepseek redteam workflow`
+
+Completed scope:
+
+- Add four explicit DeepSeek red-team prompt modes per attack surface: direct, stealth, chain, and bypass.
+- Return `prompt_modes` through the Dashboard summary API so the frontend can display and edit full prompt templates.
+- Propagate `attack_mode` through DeepSeek batch results, Guardian metadata, and history payloads.
+- Replace raw JSON DeepSeek output panels with structured attack and Guardian detail views.
+- Add an in-detail “调用 DeepSeek 分析并优化规则” action for non-blocked red-team samples.
+- Keep raw JSON available behind expandable details for debugging without making it the main display.
+- Update project overview and update log.
+- Add tests for prompt modes and `attack_mode` propagation.
+
+Validation:
+
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 57 tests passed.
+- `git diff --check` passed.
+- Dashboard foreground smoke test passed: `GET /` returned `200`.
+- Dashboard summary API returned 29 cases, 7 attack surfaces, and 4 DeepSeek prompt modes per surface.
+- Secret scan passed: no real API key was written to tracked files.
+
+## Stage 19 - DeepSeek detail modal and anomaly layer upgrade
+
+Commit message: `feat: improve redteam details and anomaly detection`
+
+Completed scope:
+
+- Simplify the DeepSeek batch area into a matrix plus a compact selected-attack summary.
+- Add a modal detail view opened from each batch row, with attack points on the left and Guardian blocking analysis on the right.
+- Keep missed-detection analysis and adaptive-rule application inside the detail modal.
+- Upgrade `AnomalyLayer` beyond repeated-tool detection:
+  - DeepSeek red-team metadata with attack-chain keywords can now produce `BLOCK`.
+  - Read/fetch steps combined with exfiltration targets can now produce `BLOCK`.
+  - Read/fetch to high-impact tools can now produce `FLAG` or `BLOCK`.
+- Add offline case `an-002` for a read-file exfiltration chain.
+- Sync `datasets/seed_cases.jsonl` and regenerate `report/eval_results.md/json`.
+- Update project overview and update log.
+
+Validation:
+
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 60 tests passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 30 total cases, 22/22 attacks detected, 0 blocking false positives, 2 benign flags.
+- Anomaly layer distribution now includes 5 blocks and 7 flags in the offline evaluation.
+
+## Stage 20 - Rules management and acceptance demo
+
+Commit message: `feat: add rules management and demo acceptance`
+
+Completed scope:
+
+- Upgrade adaptive rules with `source`, `enabled`, `hit_count`, `created_at`, and `last_hit_at` metadata while keeping old rule files compatible.
+- Count adaptive-rule hits when PolicyLayer matches a rule.
+- Add rule-management API endpoints:
+  - `GET /api/adaptive-rules`
+  - `POST /api/adaptive-rules/toggle`
+  - `POST /api/adaptive-rules/delete`
+- Add a Dashboard rules-management panel with source, hit count, enabled/disabled status, toggle, and revoke actions.
+- Add an attack-chain view to the DeepSeek detail modal: user request -> model output/attack point -> tool call -> taint source -> defense-layer hit.
+- Add one-click acceptance demo mode through `POST /api/demo-run`.
+- Generate demo artifacts under `sandbox_runs/demo_acceptance/`: Markdown record, JSON result, and SVG screenshot snapshot.
+- Serve demo artifacts through `/artifacts/demo_acceptance/...`.
+- Add tests for adaptive-rule management and acceptance artifact generation.
+- Update project overview, operation guide, and update log.
+
+Validation:
+
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 62 tests passed.
+- Dashboard foreground smoke test passed: `GET /` returned `200`.
+- `GET /api/adaptive-rules` returned rule summary.
+- `POST /api/demo-run` returned 7 surfaces and 7/7 detected.
+- Generated `.svg` screenshot and `.md` acceptance record were both served with HTTP 200.
+
+## Stage 21 - Final LaTeX report
+
+Commit message: `docs: add final latex report`
+
+Completed scope:
+
+- Add `report/final_report.tex` as the final course report in LaTeX format.
+- Compile `report/final_report.pdf` for direct review and submission preview.
+- Align the report with the selected topic and required deliverables:
+  - security risk analysis,
+  - adversarial and jailbreak test set,
+  - attack scripts,
+  - demonstrable agent behavior supervision prototype.
+- Include current evaluation metrics: 30 total cases, 22 attacks, 22/22 detected, 0 blocking false positives, 2 benign flags.
+- Add figure placeholders with explicit screenshot instructions for system architecture, Guardian layers, Dashboard overview, DeepSeek attack chain, rules management, benchmark output, and demo acceptance snapshot.
+- Update `docs/project_overview.md` and `docs/update_log.md` to mark the LaTeX report as complete.
+
+Validation:
+
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` completed successfully and generated a 13-page PDF.
+- Secret scan passed: no real API key was written to tracked files.
+
+## Stage 22 - Final presentation deck
+
+Commit message: `docs: add final presentation deck`
+
+Completed scope:
+
+- Add `report/llm_security_argus_briefing.pptx` as a concise 9-slide course briefing deck.
+- Structure the deck around the selected topic:
+  - research problem and attack surfaces,
+  - completed deliverables,
+  - Argus Guardian architecture,
+  - four-layer behavior supervision mechanism,
+  - red-team samples and DeepSeek online attack workflow,
+  - quantified evaluation results,
+  - Dashboard demo and acceptance flow,
+  - limitations and future work.
+- Include final evaluation metrics in the deck: 30 total cases, 22 attacks, 22/22 detected, 0 blocking false positives, average audit latency shown in the deck.
+- Add future-work discussion for public attack-set integration and tool-set scaling beyond fixed presets.
+- Update `docs/project_overview.md` and `docs/update_log.md` to register the PPT deliverable.
+
+Validation:
+
+- Generated the PPTX with `@oai/artifact-tool`.
+- Rendered the final PPTX to slide images and inspected all 9 slides.
+- `slides_test.py` passed with no overflow detected.
+
+## Stage 23 - Printable dashboard, tool registry, and template report
+
+Commit message: `docs: finalize printable report and tool registry`
+
+Completed scope:
+
+- Convert the Dashboard visual theme to a white-background, black-text presentation style for report screenshots and printing.
+- Add print-friendly CSS while preserving existing Dashboard workflows.
+- Add `src/guardian/tool_registry.py` to describe enabled tools with capability tags, risk levels, and audit focus areas.
+- Wire `PolicyLayer` to the tool registry so unknown tools remain blocked with a clearer onboarding explanation.
+- Add tests for tool-registry behavior.
+- Add `docs/tool_onboarding_policy.md` to clarify that tool-set scaling is a larger future-work item, with a small engineering bridge now implemented.
+- Rewrite `report/final_report.tex` according to the uploaded summer-term report template structure:
+  - cover page,
+  - filling instructions,
+  - table of contents,
+  - abstract,
+  - five report chapters,
+  - references,
+  - appendices.
+- Regenerate `report/final_report.pdf` as a template-aligned PDF.
+- Sync `report/llm_security_argus_briefing.pptx` average audit latency with the latest benchmark result.
+- Refresh `report/eval_results.md` and `report/eval_results.json` from the current benchmark run.
+- Update project overview, self-audit, and update log.
+
+Validation:
+
+- Dashboard foreground smoke test passed: `GET http://127.0.0.1:8765/` returned `200`.
+- Dashboard CSS smoke test confirmed `color-scheme: light`.
+- `node --check dashboard\app.js` passed.
+- `.\.venv\Scripts\python -m compileall src scripts tests` passed.
+- `.\.venv\Scripts\python -m pytest` passed: 65 tests passed.
+- `.\.venv\Scripts\python scripts\run_benchmark.py` passed: 30 total cases, 22/22 attacks detected, 0 blocking false positives, 2 benign flags.
+- Latest latency metrics: avg 0.897ms, p50 0.875ms, p95 1.471ms.
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed and produced the template-aligned PDF at that stage.
+- Secret scan passed: no real DeepSeek API key was written to tracked project files.
+
+## Stage 24 - Report narrative and layer explanation polish
+
+Commit message: `docs: polish report analysis and layer explanation`
+
+Completed scope:
+
+- Rewrite the report goal and deliverables sections into more continuous prose.
+- Expand the four-layer Guardian explanation with the design principle behind each layer:
+  - action boundary,
+  - tainted data flow,
+  - intent consistency,
+  - behavior sequence anomaly.
+- Add short code excerpts for the Guardian decision aggregation and TaintLayer fragment-flow judgment.
+- Expand the experimental analysis to explain what 22/22 detection does and does not prove.
+- Clarify that benign `FLAG` cases are non-blocking audit warnings rather than blocking false positives.
+- Add a representative-case table for tool hijack, indirect injection, sequence anomaly, and benign warning samples.
+- Rewrite the innovation and conclusion sections to reduce list-like phrasing.
+- Regenerate `report/final_report.pdf` as a 19-page PDF.
+- Update project overview and update log to match the new report page count.
+
+Validation:
+
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed twice.
+- Rendered pages 6-15 with Poppler and inspected the four-layer explanation, code snippets, result tables, and representative-case table.
+- Secret scan passed: no real DeepSeek API key was written to tracked project files.
+
+## Stage 25 - Report diagrams and demo flow
+
+Commit message: `docs: add report diagrams and code annotations`
+
+Completed scope:
+
+- Add TikZ support and shared light-color figure styles to the final LaTeX report.
+- Replace the system architecture placeholder with an in-report architecture diagram covering user request, LLM Agent, ToolCall, four Guardian layers, decision, execution or blocking, audit logs, and Dashboard.
+- Replace the four-layer Guardian placeholder with an in-report decision-flow diagram showing Policy, Taint, Intent, Anomaly, Verdict aggregation, and final `BLOCK / FLAG / ALLOW` results.
+- Add a web demo workflow diagram showing the classroom operation path from Dashboard startup to attack replay, matrix inspection, detail expansion, rule management, and acceptance artifacts.
+- Add comments to the report's key Guardian and Taint code excerpts, plus short prose explaining what each annotated code block proves.
+- Update appendix screenshot guidance so generated overview diagrams are no longer listed as required manual screenshots.
+- Update project overview and update log to reflect the new 20-page report PDF.
+
+Validation:
+
+- `xelatex -interaction=nonstopmode -halt-on-error final_report.tex` passed twice.
+- Rendered pages 4-12 with Poppler and inspected the generated architecture diagram, code annotations, Guardian flow diagram, demo workflow diagram, and screenshot placeholders.
+- Secret scan passed: no real DeepSeek API key was written to tracked project files.

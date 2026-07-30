@@ -9,6 +9,186 @@
 - 自适应规则只能匹配运行时可观察的工具名、用户请求和工具输入，不能匹配攻击面或 metadata。
 - 前端状态矩阵始终显示 Guardian 的真实动作；漏拦截只做额外标记，不再把 `ALLOW` 显示成 `BLOCK`。
 - 良性样本的 `FLAG` 与 `BLOCK` 都计入告警误报，并新增 Block/Alert Recall、Precision 和两类 FPR。
+## 2026-07-24 - Report Diagrams And Demo Flow
+
+本次报告补充：
+
+- 在 `report/final_report.tex` 中加入 TikZ 绘图样式，直接生成系统总体架构图，覆盖用户请求、LLM Agent、ToolCall、四层 Guardian、最终决策、工具执行或阻断、审计日志和 Dashboard。
+- 将“四层 Guardian 判定流程图”从截图占位改为报告内置流程图，明确展示 Policy、Taint、Intent、Anomaly 四层如何产生 Verdict，以及 `BLOCK > FLAG > ALLOW` 的聚合规则。
+- 在“网页演示系统”小节新增网页操作流程图，说明课堂展示时从打开 Dashboard、选择攻击面、运行审计、查看矩阵、展开详情到沉淀验收记录的路径。
+- 为报告中的 Guardian 汇总决策代码和 Taint 片段级污点代码加入注释，并补充正文说明，方便答辩时解释关键代码。
+- 调整附录截图清单：架构图和流程图已由报告生成，后续主要补 Dashboard、DeepSeek 攻击链、规则管理、Benchmark 和演示验收的真实运行截图。
+
+本次验证结果：
+
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 20 页 PDF。
+- 渲染抽查通过：使用 Poppler 抽查摘要页、系统架构图、代码节选、四层判定流程图和网页演示流程图，未发现遮挡或溢出。
+
+## 2026-07-24 - Report Narrative And Four-Layer Explanation Polish
+
+本次报告润色：
+
+- 重写 `report/final_report.tex` 中“选题目标”和“作品成果”部分，减少清单式表达，改为更连贯地说明项目如何从红队样本、防御机制和网页验收形成闭环。
+- 深入扩写“四层行为监督机制”小节，解释四层为什么分别对应动作边界、数据来源、意图一致性和行为序列，而不是简单关键词堆叠。
+- 在报告中加入两段短代码节选：Guardian 四层 Verdict 聚合逻辑、Taint 层片段级污点流入高权限动作的判断逻辑。
+- 扩写实验分析，说明 22/22 检出只代表当前评测集上的结果，不等同于覆盖全部真实攻击；解释 2 条良性 `FLAG` 为什么属于旁路告警而非阻断型误报。
+- 新增代表性样本分析表，解释工具调用劫持、间接提示注入、序列异常和良性告警样本分别由哪些层命中、结果含义是什么。
+- 重写“创新性说明”和“总结”，减少“第一、第二、第三”的汇报腔，让语言更像完整报告正文。
+
+本次验证结果：
+
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 19 页 PDF。
+- 渲染检查通过：抽查第 6-15 页，四层表格、代码块、实验表格和代表性样本表均无溢出或遮挡。
+- 密钥扫描通过：未发现真实 DeepSeek API Key 写入项目文件。
+
+## 2026-07-24 - Printable Dashboard, Tool Registry, And Template Report
+
+本次定稿前完善：
+
+- 将 Dashboard 从深色主题切换为白底黑字浅色主题，并补充打印友好的样式，方便报告截图和纸质打印。
+- 保留原有 Dashboard 布局与交互，不改变攻击面复跑、DeepSeek 批量红队、规则管理、攻击链视图和一键验收功能。
+- 新增 `src/guardian/tool_registry.py`，为内置工具记录能力标签、风险等级和审计关注点。
+- `PolicyLayer` 从工具能力注册表读取当前启用工具；未知工具仍默认阻断，并提示新工具应先登记能力标签、最小权限和审计关注点。
+- 新增 `tests/test_tool_registry.py`，验证工具注册表与策略白名单一致。
+- 新增 `docs/tool_onboarding_policy.md`，说明“工具集超出预设”当前是中等偏大的工程问题，本阶段已补工具能力登记入口，完整治理继续放在展望。
+- 按用户提供的夏季学期 Word 模板重写 `report/final_report.tex`，包含封面、填写说明、目录、摘要、五章正文、参考文献和附录。
+- 重新编译 `report/final_report.pdf`，当前为 19 页，保留实验结果和截图占位，并附上每张图应放什么内容的文字说明。
+- 同步更新 `report/llm_security_argus_briefing.pptx` 中的平均审计延迟为最新 benchmark 结果 0.897ms。
+- 更新 `docs/project_overview.md` 和 `docs/project_self_audit.md`，同步当前验收数据、工具扩展结论和后续重点。
+
+本次验证结果：
+
+- 前端页面烟测通过：`GET http://127.0.0.1:8765/` 返回 `200`，`styles.css` 确认 `color-scheme: light`。
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：65 passed。
+- Benchmark 通过：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警。
+- 最新离线延时：平均 0.897ms，p50 0.875ms，p95 1.471ms。
+- LaTeX 编译通过：`xelatex -interaction=nonstopmode -halt-on-error final_report.tex`，生成 19 页 PDF。
+- 密钥扫描通过：未发现真实 DeepSeek API Key 写入项目文件。
+
+## 2026-07-17 - Final Presentation Deck
+
+本次新增汇报材料：
+
+- 新增 `report/llm_security_argus_briefing.pptx` 作为课程汇报 PPT。
+- PPT 共 9 页，结构为：选题与研究问题、攻击面、项目交付物、系统架构、四层 Guardian 机制、红队与 DeepSeek 在线样本、实验结果、网页演示验收、局限与展望。
+- 实验结果页写入当时定稿口径：30 条样本、22 条攻击样本、22/22 攻击检出、0 阻断型误报、平均审计延迟 1.049ms；2026-07-24 已随最新 benchmark 同步为 0.897ms。
+- 展望页补充后续可深入方向：接入 AdvBench/JailbreakBench 等现有攻击集扩大测试，工具集超出预设时升级为工具能力标签、最小权限和场景策略。
+- 已使用演示文稿工具渲染最终 PPTX 并逐页检查；`slides_test.py` 检查通过，无元素越界。
+- 更新 `docs/project_overview.md`，将 PPT 标记为汇报交付物。
+
+## 2026-07-16 - Final LaTeX Report
+
+本次定稿文档更新：
+
+- 新增 `report/final_report.tex` 作为课程正式 LaTeX 报告，并生成 `report/final_report.pdf` 预览版。
+- 报告对齐选题要求，覆盖安全风险分析、攻击面威胁模型、四层行为监督机制、对抗样本与越狱测试集、攻击脚本、可演示原型系统和实验结果。
+- 报告写入当前定稿评测数据：30 条样本、22 条攻击、22/22 检出、0 阻断型误报、2 条良性告警。
+- 报告预留系统架构图、四层防御流程图、Dashboard 总览、DeepSeek 攻击链弹窗、规则管理页、Benchmark 结果和一键演示验收快照等图位，并附有每张图应放什么内容的文字说明。
+- 更新 `docs/project_overview.md`，将安全风险分析报告状态标记为 LaTeX 正式报告已完成。
+
+## 2026-07-16 - Rules Management And Acceptance Demo
+
+本次 B/D 方向优化：
+
+- 自适应规则从简单 JSON 列表升级为可管理规则，兼容旧规则并新增 `source`、`enabled`、`hit_count`、`created_at`、`last_hit_at` 字段。
+- `PolicyLayer` 命中自适应规则时会自动累加命中次数，停用规则不会参与匹配。
+- 新增 Dashboard API：`GET /api/adaptive-rules`、`POST /api/adaptive-rules/toggle`、`POST /api/adaptive-rules/delete`。
+- 新增规则管理页：展示规则来源、命中次数、启停状态，并支持停用、启用和撤销。
+- 攻击详情弹窗新增攻击链视图，把用户请求、模型输出/攻击点、工具调用、污点来源和防御层命中串成链路图。
+- 新增一键演示脚本模式：`POST /api/demo-run` 固定运行 7 个攻击面，并写入历史审计流。
+- 一键演示会生成验收产物：`sandbox_runs/demo_acceptance/argus_demo_*.md`、`.json`、`.svg`。
+- Dashboard 通过 `/artifacts/demo_acceptance/...` 提供验收记录和 SVG 截图快照访问。
+- 新增测试覆盖自适应规则命中计数、启停、撤销，以及一键演示产物生成。
+
+本次验证结果：
+
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：62 passed。
+- Dashboard 前台 smoke test 通过：`GET http://127.0.0.1:8765/` 返回 `200`。
+- 规则管理接口通过：`GET /api/adaptive-rules` 返回规则 summary。
+- 一键演示接口通过：`POST /api/demo-run` 返回 7 个攻击面，7/7 检出。
+- 演示产物链接通过：生成的 `.svg` 截图快照和 `.md` 验收记录均可通过 HTTP 打开。
+
+## 2026-07-16 - DeepSeek Detail Modal And Anomaly Layer Upgrade
+
+本次新增功能：
+
+- DeepSeek 批量红队区改为“矩阵 + 攻击摘要 + 弹窗详情”结构，避免攻击说明和 Guardian 审计结果在主页面双列挤压。
+- 点击任意批量条目或“查看详情”按钮，会弹出完整详情：左侧展示攻击点、用户请求、工具调用、风险点，右侧展示总决策、四层 Verdict、漏拦截分析和自适应规则写入结果。
+- 主页面下方只保留当前选中条目的攻击摘要，完整 Guardian 结果交给弹窗和下方通用 `Guardian Decision` 面板展示。
+- `AnomalyLayer` 从单一重复调用检测升级为三类启发式：重复工具循环、DeepSeek 红队攻击链元数据、读取/抓取后跳转高影响工具或外联目标共现。
+- 新增离线攻击样本 `an-002`：读取系统日志并外联到 `evil.example`，用于展示第 4 层 anomaly 的 `BLOCK` 能力。
+- 新增 anomaly 单元测试，覆盖 DeepSeek 红队元数据、读取外联链路和读取后高影响工具跳转。
+- 更新评测结果，离线集变为 30 条：22 条攻击、8 条良性对照。
+
+本次验证结果：
+
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：60 passed。
+- Benchmark 通过：30 条用例，22/22 攻击检出，0 阻断型误报，2 条良性告警。
+- 第 4 层统计不再全绿：`anomaly` 层在离线评测中产生 5 次 `BLOCK`、7 次 `FLAG`。
+
+## 2026-07-16 - DeepSeek Red Team UX And Prompt Modes
+
+本次新增功能：
+
+- DeepSeek 在线红队从单一固定提示词升级为 4 种攻击模式：精准单步、伪装正常任务、多步攻击链、绕过变体。
+- 每个攻击面现在通过 `/api/summary` 返回 `prompt_modes`，前端可按模式显式展示和编辑完整提示词。
+- 批量生成接口新增 `attack_mode` 元数据，审计历史和 Guardian context 能记录该条攻击来自哪种生成模式。
+- DeepSeek 批量条目的详情展示从原始 JSON 代码块改为结构化说明，拆分展示攻击目标、用户请求、工具调用、污点来源、风险点和危险解释。
+- Guardian / 漏拦截分析区改为结构化展示总状态、四层 Verdict、漏拦截状态、DeepSeek 分析结果和自适应规则写入结果。
+- 未被 `BLOCK` 的 DeepSeek 红队条目可在详情区直接点击“调用 DeepSeek 分析并优化规则”，形成红队生成、Guardian 审计、漏拦截复盘、规则同步、重评估的闭环。
+- 更新 `docs/project_overview.md`，说明 DeepSeek 在线红队的四类模式和前端漏拦截闭环。
+- 新增测试覆盖攻击面提示词模式和 `attack_mode` 透传。
+
+本次验证结果：
+
+- JS 语法检查通过：`node --check dashboard\app.js`。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：57 passed。
+- 补丁检查通过：`git diff --check`。
+- Dashboard 前台 smoke test 通过：`GET http://127.0.0.1:8765/` 返回 `200`。
+- Dashboard 摘要接口通过：29 个样本、7 个攻击面、每个攻击面 4 个 DeepSeek 提示词模式。
+- 无 API Key 时在线 DeepSeek 接口按预期拒绝真实调用，不会把密钥写入项目文件。
+
+## 2026-07-16 - Adversarial Dataset And Quantified Evaluation
+
+本次 C 方向优化：
+
+- 将离线评测种子集扩展到 29 条：21 条攻击样本、8 条良性对照。
+- 新增攻击类别覆盖：模型越狱、训练数据泄露扩展样本、工具调用劫持外联样本、记忆中毒外部 URL 链路、环境感知污染 shell 链路、序列异常样本。
+- 新增良性对照：低于异常阈值的重复读取、读取不可信源后写普通摘要等，用于观察告警和阻断的区别。
+- 同步更新 `datasets/seed_cases.jsonl`，并增加测试保证 jsonl 样本 ID 与 `src/redteam/attacks.py` 的 `EVAL_CASES` 一致。
+- 强化 `PolicyLayer` 对 PowerShell encoded command 的阻断，覆盖模型越狱变体。
+- 增强 `src/eval/benchmark.py`：新增按攻击面分类指标、四层 Verdict 分布、混淆矩阵、良性告警数、p50/p95 延时、逐样本层级动作。
+- `scripts/run_benchmark.py` 现在同时输出 `report/eval_results.md` 和 `report/eval_results.json`。
+
+本次验证结果：
+
+- `.\.venv\Scripts\python scripts\run_benchmark.py`：29 条用例，21/21 攻击检出，0 阻断型误报，2 条良性告警。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：56 passed。
+
+## 2026-07-16 - Four-Layer Explanation And Code Comments
+
+本次新增文档和注释：
+
+- 深入扩写 `docs/project_overview.md` 中 Guardian 四层模块的实现说明，不再只写概述作用，而是解释每层输入、判断逻辑、输出结果、覆盖攻击面和当前边界。
+- 新增 `project_overview` 的“核心代码注释导航”，说明答辩和小组协作时应如何阅读核心代码。
+- 补充四层核心代码注释：`guardian.py`、`policy.py`、`taint.py`、`intent.py`、`anomaly.py`、`adaptive_rules.py`。
+- 补充 Agent 和工具执行代码注释：`deepseek_agent.py`、`tools.py`。
+- 补充红队实验台、Dashboard 服务、审计日志和前端批量矩阵注释：`surface_lab.py`、`dashboard_server.py`、`audit.py`、`dashboard/app.js`。
+
+本次验证结果：
+
+- 代码注释为说明性改动，不改变业务逻辑。
+- 编译检查通过：`.\.venv\Scripts\python -m compileall src scripts tests`。
+- 单元测试通过：54 passed。
+- 前端 JS 语法检查通过：`node --check dashboard\app.js`。
 
 ## 2026-07-16 - Operation Guide And Topic-Aligned Self Audit
 

@@ -1,5 +1,6 @@
 """Dashboard API helper tests."""
 
+from pathlib import Path
 from urllib.error import URLError
 
 from scripts.dashboard_server import (
@@ -13,19 +14,27 @@ from scripts.dashboard_server import (
     normalize_tainted_sources,
     record_history,
     resolve_static_path,
+    run_demo_acceptance,
     run_deepseek_batch,
     run_deepseek_redteam,
 )
 from src.redteam.attacks import EVAL_CASES
-from src.redteam.surface_lab import ATTACK_SURFACES, _deepseek_error_message, coerce_deepseek_attack, get_attack_surface
+from src.redteam.surface_lab import (
+    ATTACK_SURFACES,
+    _deepseek_error_message,
+    coerce_deepseek_attack,
+    get_attack_surface,
+    serialize_surface,
+)
 
 
 def test_dashboard_summary_contains_metrics():
     data = build_dashboard_summary()
     assert data["summary"]["total"] == len(EVAL_CASES)
     assert data["summary"]["detected"] >= 1
-    assert data["summary"]["false_positives"] == 1
-    assert data["summary"]["flagged_benign"] == 1
+    assert data["summary"]["false_positives"] == (
+        data["summary"]["blocked_benign"] + data["summary"]["flagged_benign"]
+    )
     assert 0 <= data["summary"]["precision"] <= 1
     assert data["cases"]
 
@@ -36,6 +45,14 @@ def test_deepseek_permission_error_gets_actionable_message():
     message = _deepseek_error_message(URLError(reason))
     assert "WinError 10013" in message
     assert "出站网络权限" in message
+
+
+def test_attack_surface_summary_exposes_prompt_modes():
+    surface = serialize_surface(get_attack_surface("tool_hijack"))
+    modes = surface["prompt_modes"]
+    assert {mode["id"] for mode in modes} >= {"direct", "stealth", "chain", "bypass"}
+    assert "攻击模式" in modes[1]["prompt"]
+    assert len(modes[1]["prompt"].splitlines()) > 6
 
 
 def test_evaluate_case_serializes_decision():
@@ -135,8 +152,11 @@ def test_deepseek_redteam_path_accepts_fake_generator():
 
 
 def test_deepseek_batch_path_accepts_fake_generator():
+    seen_prompts = []
+
     class FakeGenerator:
         def generate_many(self, surface, count=1, prompt_override=""):
+            seen_prompts.append(prompt_override)
             return [
                 {
                     "attack_surface": surface.id,
@@ -151,9 +171,16 @@ def test_deepseek_batch_path_accepts_fake_generator():
                 for idx in range(count)
             ]
 
-    result = run_deepseek_batch({"surface_id": "tool_hijack", "count": 3}, generator=FakeGenerator())
+    result = run_deepseek_batch(
+        {"surface_id": "tool_hijack", "count": 3, "attack_mode": "stealth"},
+        generator=FakeGenerator(),
+    )
+    assert "伪装正常任务" in seen_prompts[0]
+    assert result["attack_mode"] == "stealth"
     assert result["count"] == 3
     assert result["actions"]["block"] == 3
+    assert result["results"][0]["attack_mode"] == "stealth"
+    assert result["results"][0]["context"]["metadata"] == {}
 
 
 def test_deepseek_labels_are_not_passed_into_guardian_context():
@@ -222,3 +249,14 @@ def test_history_store_records_and_summarizes_events(tmp_path):
     assert history["summary"]["actions"]["block"] == 1
     assert history["entries"][0]["surface_id"] == "memory_poison"
     assert "policy" in history["summary"]["layers"]
+
+
+def test_demo_acceptance_generates_artifacts(tmp_path):
+    result = run_demo_acceptance(output_dir=tmp_path)
+    assert result["total"] == len(ATTACK_SURFACES)
+    assert result["detected"] == len(ATTACK_SURFACES)
+    artifacts = result["artifacts"]
+    assert Path(artifacts["json"]).is_file()
+    assert Path(artifacts["markdown"]).is_file()
+    assert Path(artifacts["screenshot"]).is_file()
+    assert artifacts["screenshot_url"].endswith(".svg")

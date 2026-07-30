@@ -1,13 +1,16 @@
 """自适应规则只能使用运行时可观察字段。"""
 
-from src.guardian import Context, ToolCall
 import json
 
+from src.guardian import Context, ToolCall
 from src.guardian.adaptive_rules import (
     append_adaptive_rules,
+    delete_adaptive_rule,
+    first_matching_adaptive_rule,
     load_adaptive_rules,
     match_adaptive_rule,
     sanitize_rule,
+    set_rule_enabled,
 )
 
 
@@ -75,3 +78,31 @@ def test_rule_without_observable_condition_never_matches():
     call = ToolCall("web_fetch", {"url": "https://example.com/data"})
 
     assert not match_adaptive_rule(rule, call, Context(user_request="fetch report"))
+
+def test_adaptive_rule_hit_count_toggle_and_delete(tmp_path):
+    path = tmp_path / "adaptive_rules.json"
+    rules = append_adaptive_rules(
+        [{
+            "description": "block fake exfil",
+            "source": "unit-test",
+            "tool_name": "web_fetch",
+            "input_contains_any": ["evil.example"],
+        }],
+        path=path,
+    )
+    rule_id = rules[0]["id"]
+
+    ctx = Context(user_request="fetch report")
+    call = ToolCall("web_fetch", {"url": "https://evil.example/data"})
+    assert first_matching_adaptive_rule(call, ctx, path=path)["id"] == rule_id
+    assert load_adaptive_rules(path)[0]["hit_count"] == 1
+
+    assert set_rule_enabled(rule_id, False, path=path)["enabled"] is False
+    assert first_matching_adaptive_rule(call, ctx, path=path) is None
+
+    assert set_rule_enabled(rule_id, True, path=path)["enabled"] is True
+    assert first_matching_adaptive_rule(call, ctx, path=path)["id"] == rule_id
+    assert load_adaptive_rules(path)[0]["hit_count"] == 2
+
+    assert delete_adaptive_rule(rule_id, path=path) is True
+    assert load_adaptive_rules(path) == []

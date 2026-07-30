@@ -2,6 +2,8 @@
 
 大的攻击/越狱样本集放这里（jsonl 格式），默认不入 git；小型可复现种子集 `seed_cases.jsonl` 入库，用于课程演示和离线评测。
 
+当前 `seed_cases.jsonl` 与 `src/redteam/attacks.py` 保持同步，包含 21 条攻击样本和 8 条良性对照，覆盖提示注入、模型越狱、训练数据泄露、工具调用劫持、记忆中毒、环境感知污染、间接提示注入和序列异常。
+
 ## 格式约定（每行一个 JSON 对象）
 
 ```json
@@ -19,7 +21,7 @@
 ## 目录
 
 - `datasets/*.jsonl` —— 攻击/良性用例（git 忽略）
-- `datasets/seed_cases.jsonl` —— 阶段 2 入库的小型种子集
+- `datasets/seed_cases.jsonl` —— 离线评测种子集，和 `src/redteam/attacks.py` 的 `EVAL_CASES` 同步
 - `datasets/public_jailbreak_seed.jsonl` —— 由公开数据集样例转换得到的小型越狱种子集
 - `datasets/public_samples/` —— 可提交的小型公开格式样例，用于验证转换脚本
 - `datasets/fixtures/` —— 间接注入用的被读取文件

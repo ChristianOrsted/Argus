@@ -16,6 +16,11 @@ def test_blocks_reverse_shell():
     assert v.action == Action.BLOCK
 
 
+def test_blocks_encoded_powershell():
+    v = PolicyLayer().check(ToolCall("run_shell", {"command": "powershell -enc SQBFAFgA"}), ctx)
+    assert v.action == Action.BLOCK
+
+
 def test_blocks_unknown_tool():
     v = PolicyLayer().check(ToolCall("delete_database", {}), ctx)
     assert v.action == Action.BLOCK

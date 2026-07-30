@@ -1,12 +1,20 @@
 """Argus Dashboard 本地服务。
 
-只使用 Python 标准库：提供静态前端和 Guardian 评估 API。
+这个脚本是可演示原型系统的入口：一个 Python 进程同时承担前端静态文件服务和
+后端 Guardian API。前端所有操作最终都会落到这里：
+
+- 离线样本评估：把预置 AttackCase 交给 Guardian；
+- 自定义工具调用评估：把用户输入组装成 ToolCall；
+- DeepSeek 在线红队：生成攻击样本后再交给 Guardian 审计；
+- 漏拦截分析：让 DeepSeek 建议受限自适应规则，并重评估；
+- 历史流：把每次审计结果写入 SQLite，供前端统计和回放。
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import html
 import json
 import mimetypes
 import sqlite3
@@ -20,13 +28,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.config import AGENT_MODEL, DEEPSEEK_API_KEY
 from src.eval.benchmark import evaluate_guardian
-from src.guardian.adaptive_rules import append_adaptive_rules, load_adaptive_rules, sanitize_rule
+from src.guardian.adaptive_rules import (
+    append_adaptive_rules,
+    delete_adaptive_rule,
+    load_adaptive_rules,
+    sanitize_rule,
+    set_rule_enabled,
+)
 from src.guardian import Context, DeepSeekIntentJudge, ToolCall, build_default_guardian
 from src.redteam.attacks import EVAL_CASES, AttackCase
 from src.redteam.surface_lab import (
     ATTACK_SURFACES,
     DeepSeekDefenseAnalyzer,
     DeepSeekRedTeamGenerator,
+    build_redteam_prompt,
     generated_attack_to_case,
     get_attack_surface,
     serialize_surface,
@@ -36,9 +51,11 @@ ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = ROOT / "dashboard"
 STATIC_ROOT = DASHBOARD_DIR.resolve()
 HISTORY_DB = ROOT / "sandbox_runs" / "audit" / "dashboard_history.sqlite3"
+DEMO_DIR = ROOT / "sandbox_runs" / "demo_acceptance"
 
 
 def _case_context(case: AttackCase, metadata: dict | None = None) -> Context:
+    """把红队样本转换为四层 Guardian 所需的 Context。"""
     return Context(
         user_request=case.user_request,
         history=list(case.history),
@@ -69,6 +86,7 @@ def serialize_case(case: AttackCase) -> dict:
 
 
 def serialize_decision(decision) -> dict:
+    """把 Guardian Decision 转成前端可直接渲染的 JSON。"""
     return {
         "action": decision.action.value,
         "reason": decision.reason,
@@ -86,6 +104,7 @@ def serialize_decision(decision) -> dict:
 
 
 def _history_connect(db_path: Path = HISTORY_DB) -> sqlite3.Connection:
+    """打开历史库并确保表结构存在。"""
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
     conn.execute(
@@ -118,11 +137,13 @@ def _history_payload(mode: str, result: dict) -> dict:
         "decision": result.get("decision"),
         "latency_ms": result.get("latency_ms"),
         "redteam": result.get("redteam"),
+        "attack_mode": result.get("attack_mode"),
         "intent_judge_enabled": result.get("intent_judge_enabled"),
     }
 
 
 def record_history(mode: str, result: dict, db_path: Path = HISTORY_DB) -> None:
+    """把一次 Dashboard 审计写入 SQLite 历史流。"""
     payload = _history_payload(mode, result)
     case = payload.get("case") or {}
     surface = payload.get("surface") or {}
@@ -173,6 +194,7 @@ def _row_to_history_entry(row: sqlite3.Row) -> dict:
 
 
 def summarize_history(entries: list[dict]) -> dict:
+    """汇总历史审计，用于前端指标卡和四层防御统计。"""
     actions = {"allow": 0, "flag": 0, "block": 0}
     layers: dict[str, dict[str, int]] = {}
     categories: dict[str, int] = {}
@@ -223,12 +245,27 @@ def load_history(limit: int = 100, db_path: Path = HISTORY_DB) -> dict:
     }
 
 
+def list_adaptive_rules() -> dict:
+    """返回前端规则管理页需要的规则状态。"""
+    rules = load_adaptive_rules()
+    return {
+        "rules": rules,
+        "summary": {
+            "total": len(rules),
+            "enabled": sum(1 for rule in rules if rule.get("enabled", True)),
+            "disabled": sum(1 for rule in rules if not rule.get("enabled", True)),
+            "hits": sum(int(rule.get("hit_count") or 0) for rule in rules),
+        },
+    }
+
+
 def clear_history(db_path: Path = HISTORY_DB) -> None:
     with _history_connect(db_path) as conn:
         conn.execute("DELETE FROM dashboard_events")
 
 
 def normalize_tainted_sources(raw) -> set[str]:
+    """规范化前端传来的污点来源，兼容字符串和数组两种输入。"""
     if isinstance(raw, str):
         return {raw} if raw else set()
     if isinstance(raw, list):
@@ -237,6 +274,7 @@ def normalize_tainted_sources(raw) -> set[str]:
 
 
 def resolve_static_path(request_path: str) -> Path | None:
+    """解析静态文件路径，并防止通过 URL 目录穿越读取 dashboard 外文件。"""
     rel = unquote(request_path).lstrip("/")
     if not rel:
         rel = "index.html"
@@ -249,6 +287,7 @@ def resolve_static_path(request_path: str) -> Path | None:
 
 
 def evaluate_case(case: AttackCase, guardian=None, metadata: dict | None = None) -> dict:
+    """评估一个离线或在线红队样本，并返回前端所需的完整审计结果。"""
     guardian = guardian or build_default_guardian()
     ctx = _case_context(case, metadata=metadata)
     start = perf_counter()
@@ -267,12 +306,144 @@ def evaluate_case(case: AttackCase, guardian=None, metadata: dict | None = None)
 
 
 def evaluate_surface(surface_id: str) -> dict:
+    """运行某个攻击面的确定性离线样本，保证无 API Key 也能演示。"""
     surface = get_attack_surface(surface_id)
     result = evaluate_case(surface.offline_case)
     return {
         "mode": "offline",
         "surface": serialize_surface(surface),
         **result,
+    }
+
+
+def _action_counts(results: list[dict]) -> dict:
+    actions = {"allow": 0, "flag": 0, "block": 0}
+    for result in results:
+        action = (result.get("decision") or {}).get("action")
+        if action in actions:
+            actions[action] += 1
+    return actions
+
+
+def _layer_counts(results: list[dict]) -> dict:
+    layers: dict[str, dict[str, int]] = {}
+    for result in results:
+        for verdict in (result.get("decision") or {}).get("verdicts") or []:
+            layer = verdict.get("layer") or "unknown"
+            action = verdict.get("action") or "allow"
+            layers.setdefault(layer, {"allow": 0, "flag": 0, "block": 0})
+            if action in layers[layer]:
+                layers[layer][action] += 1
+    return layers
+
+
+def _layer_action(result: dict, layer: str) -> str:
+    for verdict in (result.get("decision") or {}).get("verdicts") or []:
+        if verdict.get("layer") == layer:
+            return verdict.get("action") or "allow"
+    return "allow"
+
+
+def _write_demo_svg(results: list[dict], out_path: Path, generated_at: str) -> None:
+    """生成一张无需浏览器依赖的验收截图快照（SVG）。"""
+    colors = {"allow": "#53d86a", "flag": "#f0b84a", "block": "#ff6b6b"}
+    width = 1280
+    row_h = 72
+    height = 170 + row_h * len(results)
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<rect width="100%" height="100%" fill="#0d1117"/>',
+        '<text x="42" y="58" fill="#edf3fb" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="30" font-weight="700">Argus Guardian 7-Attack-Surface Acceptance Snapshot</text>',
+        f'<text x="42" y="92" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="16">Generated: {html.escape(generated_at)} · total {len(results)} · detected {sum(1 for item in results if (item.get("decision") or {}).get("action") in {"flag", "block"})}/{len(results)}</text>',
+        '<text x="570" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">总</text>',
+        '<text x="650" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">1 policy</text>',
+        '<text x="760" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">2 taint</text>',
+        '<text x="870" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">3 intent</text>',
+        '<text x="980" y="136" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="14">4 anomaly</text>',
+    ]
+    for idx, result in enumerate(results):
+        y = 160 + idx * row_h
+        surface = result.get("surface") or {}
+        case = result.get("case") or {}
+        decision = result.get("decision") or {}
+        action = decision.get("action") or "allow"
+        parts.extend([
+            f'<rect x="36" y="{y - 28}" width="1208" height="58" rx="8" fill="#151b23" stroke="#2d3644"/>',
+            f'<text x="58" y="{y - 4}" fill="#edf3fb" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="17" font-weight="700">{idx + 1}. {html.escape(surface.get("title") or surface.get("id") or "")}</text>',
+            f'<text x="58" y="{y + 20}" fill="#8b98a9" font-family="Segoe UI, Microsoft YaHei, sans-serif" font-size="13">{html.escape(case.get("tool_call", {}).get("name") or "tool")} · {html.escape(decision.get("reason") or "")[:90]}</text>',
+        ])
+        x_positions = [585, 682, 790, 908, 1030]
+        actions = [action] + [_layer_action(result, layer) for layer in ("policy", "taint", "intent", "anomaly")]
+        for x, item_action in zip(x_positions, actions):
+            color = colors.get(item_action, "#3a4555")
+            parts.append(f'<circle cx="{x}" cy="{y}" r="13" fill="{color}" opacity="0.95"/>')
+    parts.append("</svg>")
+    out_path.write_text("\n".join(parts), encoding="utf-8")
+
+
+def _write_demo_markdown(results: list[dict], out_path: Path, generated_at: str, screenshot_name: str) -> None:
+    rows = [
+        "# Argus Demo Acceptance Record",
+        "",
+        f"- Generated: `{generated_at}`",
+        f"- Scope: fixed 7 attack surfaces",
+        f"- Detected: `{sum(1 for item in results if (item.get('decision') or {}).get('action') in {'flag', 'block'})}/{len(results)}`",
+        f"- Screenshot: `{screenshot_name}`",
+        "",
+        "| # | attack surface | tool | decision | layer actions | reason |",
+        "|---:|---|---|---|---|---|",
+    ]
+    for idx, result in enumerate(results, 1):
+        surface = result.get("surface") or {}
+        case = result.get("case") or {}
+        decision = result.get("decision") or {}
+        layers = ", ".join(
+            f"{verdict.get('layer')}={verdict.get('action')}"
+            for verdict in decision.get("verdicts") or []
+        )
+        rows.append(
+            "| {idx} | {surface} | {tool} | {action} | {layers} | {reason} |".format(
+                idx=idx,
+                surface=str(surface.get("title") or surface.get("id") or "").replace("|", "/"),
+                tool=str((case.get("tool_call") or {}).get("name") or "").replace("|", "/"),
+                action=str(decision.get("action") or "").replace("|", "/"),
+                layers=layers.replace("|", "/"),
+                reason=str(decision.get("reason") or "").replace("|", "/"),
+            )
+        )
+    out_path.write_text("\n".join(rows), encoding="utf-8")
+
+
+def run_demo_acceptance(output_dir: Path = DEMO_DIR) -> dict:
+    """一键运行固定 7 个攻击面，并生成验收记录和截图快照。"""
+    generated_at = dt.datetime.now(dt.timezone.utc).isoformat()
+    results = [evaluate_surface(surface.id) for surface in ATTACK_SURFACES]
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = output_dir / f"argus_demo_{stamp}.json"
+    md_path = output_dir / f"argus_demo_{stamp}.md"
+    svg_path = output_dir / f"argus_demo_{stamp}.svg"
+    payload = {
+        "generated_at": generated_at,
+        "total": len(results),
+        "detected": sum(1 for item in results if (item.get("decision") or {}).get("action") in {"flag", "block"}),
+        "actions": _action_counts(results),
+        "layers": _layer_counts(results),
+        "results": results,
+    }
+    json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_demo_svg(results, svg_path, generated_at)
+    _write_demo_markdown(results, md_path, generated_at, svg_path.name)
+    return {
+        **payload,
+        "artifacts": {
+            "json": str(json_path),
+            "markdown": str(md_path),
+            "screenshot": str(svg_path),
+            "json_url": f"/artifacts/demo_acceptance/{json_path.name}",
+            "markdown_url": f"/artifacts/demo_acceptance/{md_path.name}",
+            "screenshot_url": f"/artifacts/demo_acceptance/{svg_path.name}",
+        },
     }
 
 
@@ -283,7 +454,14 @@ def _generator_generate(generator, surface, prompt_override: str = "") -> dict:
         return generator.generate(surface)
 
 
-def _evaluate_generated_attack(surface, generated: dict, api_key: str = "", use_intent_judge: bool = False) -> dict:
+def _evaluate_generated_attack(
+    surface,
+    generated: dict,
+    api_key: str = "",
+    use_intent_judge: bool = False,
+    attack_mode: str = "",
+) -> dict:
+    """评估 DeepSeek 生成样本，但不把红队标签传给 Guardian。"""
     case = generated_attack_to_case(surface, generated)
     intent_client = DeepSeekIntentJudge(api_key=api_key or DEEPSEEK_API_KEY) if use_intent_judge else None
     result = evaluate_case(case, guardian=build_default_guardian(intent_client=intent_client))
@@ -291,34 +469,55 @@ def _evaluate_generated_attack(surface, generated: dict, api_key: str = "", use_
         "mode": "deepseek",
         "surface": serialize_surface(surface),
         "redteam": generated,
+        "attack_mode": attack_mode,
         "intent_judge_enabled": use_intent_judge,
         **result,
     }
 
 
 def run_deepseek_redteam(payload: dict, generator=None) -> dict:
+    """运行单条 DeepSeek 在线红队样本。保留该接口用于兼容早期前端。"""
     surface = get_attack_surface(str(payload.get("surface_id", "")))
     api_key = str(payload.get("api_key") or "")
     use_intent_judge = bool(payload.get("use_intent_judge"))
+    attack_mode = str(payload.get("attack_mode") or "")
     prompt_override = str(payload.get("prompt") or "")
+    if not prompt_override and attack_mode:
+        prompt_override = build_redteam_prompt(surface, attack_mode)
     generator = generator or DeepSeekRedTeamGenerator(api_key=api_key or DEEPSEEK_API_KEY)
     generated = _generator_generate(generator, surface, prompt_override=prompt_override)
-    return _evaluate_generated_attack(surface, generated, api_key=api_key, use_intent_judge=use_intent_judge)
+    return _evaluate_generated_attack(
+        surface,
+        generated,
+        api_key=api_key,
+        use_intent_judge=use_intent_judge,
+        attack_mode=attack_mode,
+    )
 
 
 def run_deepseek_batch(payload: dict, generator=None) -> dict:
+    """批量生成 DeepSeek 红队样本并逐条审计，供前端矩阵展示。"""
     surface = get_attack_surface(str(payload.get("surface_id", "")))
     api_key = str(payload.get("api_key") or "")
     count = max(1, min(int(payload.get("count") or 1), 8))
     use_intent_judge = bool(payload.get("use_intent_judge"))
+    attack_mode = str(payload.get("attack_mode") or "")
     prompt_override = str(payload.get("prompt") or "")
+    if not prompt_override and attack_mode:
+        prompt_override = build_redteam_prompt(surface, attack_mode)
     generator = generator or DeepSeekRedTeamGenerator(api_key=api_key or DEEPSEEK_API_KEY)
     if hasattr(generator, "generate_many"):
         generated_items = generator.generate_many(surface, count=count, prompt_override=prompt_override)
     else:
         generated_items = [_generator_generate(generator, surface, prompt_override=prompt_override) for _ in range(count)]
     results = [
-        _evaluate_generated_attack(surface, generated, api_key=api_key, use_intent_judge=use_intent_judge)
+        _evaluate_generated_attack(
+            surface,
+            generated,
+            api_key=api_key,
+            use_intent_judge=use_intent_judge,
+            attack_mode=attack_mode,
+        )
         for generated in generated_items
     ]
     actions = {"allow": 0, "flag": 0, "block": 0}
@@ -329,6 +528,7 @@ def run_deepseek_batch(payload: dict, generator=None) -> dict:
     return {
         "mode": "deepseek_batch",
         "surface": serialize_surface(surface),
+        "attack_mode": attack_mode,
         "count": len(results),
         "actions": actions,
         "results": results,
@@ -336,6 +536,7 @@ def run_deepseek_batch(payload: dict, generator=None) -> dict:
 
 
 def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
+    """分析漏拦截、写入受限自适应规则，并对同一攻击重评估。"""
     result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
     surface_id = str(payload.get("surface_id") or (result.get("surface") or {}).get("id") or "")
     surface = get_attack_surface(surface_id)
@@ -358,7 +559,7 @@ def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
     if bool(payload.get("apply_rules", True)):
         applied = append_adaptive_rules(analysis.get("suggested_rules", []))
         if generated:
-            recheck_result = _evaluate_generated_attack(surface, generated)
+            recheck_result = _evaluate_generated_attack(surface, generated, attack_mode=str(result.get("attack_mode") or ""))
     return {
         "surface": serialize_surface(surface),
         "analysis": analysis,
@@ -369,6 +570,7 @@ def analyze_missed_detection(payload: dict, analyzer=None) -> dict:
 
 
 def evaluate_custom(payload: dict) -> dict:
+    """评估前端手工输入的任意 ToolCall，便于课堂现场复现实验。"""
     call = ToolCall(
         name=str(payload.get("tool_name") or payload.get("name") or "run_shell"),
         input=payload.get("input") if isinstance(payload.get("input"), dict) else {},
@@ -495,6 +697,12 @@ class DashboardHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/history":
             _json_response(self, 200, load_history())
             return
+        if parsed.path == "/api/adaptive-rules":
+            _json_response(self, 200, list_adaptive_rules())
+            return
+        if parsed.path.startswith("/artifacts/demo_acceptance/"):
+            self._serve_demo_artifact(parsed.path)
+            return
         self._serve_static(parsed.path)
 
     def do_POST(self):  # noqa: N802
@@ -535,12 +743,32 @@ class DashboardHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/analyze-miss":
                 _json_response(self, 200, analyze_missed_detection(payload))
                 return
+            if parsed.path == "/api/adaptive-rules/toggle":
+                rule = set_rule_enabled(str(payload.get("rule_id") or ""), bool(payload.get("enabled")))
+                if rule is None:
+                    _json_response(self, 404, {"error": "unknown adaptive rule"})
+                    return
+                _json_response(self, 200, list_adaptive_rules())
+                return
+            if parsed.path == "/api/adaptive-rules/delete":
+                deleted = delete_adaptive_rule(str(payload.get("rule_id") or ""))
+                if not deleted:
+                    _json_response(self, 404, {"error": "unknown adaptive rule"})
+                    return
+                _json_response(self, 200, list_adaptive_rules())
+                return
             if parsed.path == "/api/history/clear":
                 clear_history()
                 _json_response(self, 200, load_history())
                 return
             if parsed.path == "/api/run-all":
                 _json_response(self, 200, build_dashboard_summary())
+                return
+            if parsed.path == "/api/demo-run":
+                result = run_demo_acceptance()
+                for item in result["results"]:
+                    record_history("demo", item)
+                _json_response(self, 200, result)
                 return
             _json_response(self, 404, {"error": "unknown endpoint"})
         except Exception as exc:  # pragma: no cover - 防止前端得到空响应
@@ -549,6 +777,25 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def _serve_static(self, request_path: str) -> None:
         target = resolve_static_path(request_path)
         if target is None:
+            self.send_error(404)
+            return
+        body = target.read_bytes()
+        content_type = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
+        self.send_response(200)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _serve_demo_artifact(self, request_path: str) -> None:
+        name = unquote(request_path.rsplit("/", 1)[-1])
+        target = (DEMO_DIR / name).resolve()
+        try:
+            target.relative_to(DEMO_DIR.resolve())
+        except ValueError:
+            self.send_error(404)
+            return
+        if not target.is_file():
             self.send_error(404)
             return
         body = target.read_bytes()
