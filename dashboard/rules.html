@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>规则管理 · Argus Guardian</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="rules">
+  <div class="app-shell">
+    <aside class="sidebar"></aside>
+    <main class="workspace">
+      <section class="panel rules-panel">
+        <div class="panel-head">
+          <div><p class="eyebrow">Adaptive Rules</p><h3>自适应规则管理</h3><small id="rulesSummary" class="scope-note">规则加载中</small></div>
+          <button id="rulesRefreshBtn" class="ghost-button">刷新规则</button>
+        </div>
+        <div id="rulesList" class="rules-list"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/shell.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

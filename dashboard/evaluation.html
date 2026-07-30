@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>演示与评估 · Argus Guardian</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="evaluation">
+  <div class="app-shell">
+    <aside class="sidebar"></aside>
+    <main class="workspace">
+      <section class="panel demo-panel">
+        <div class="panel-head">
+          <div><p class="eyebrow">Acceptance Demo</p><h3>一键演示脚本模式</h3><small class="scope-note">固定运行 7 个攻击面，生成验收记录和截图快照</small></div>
+          <button id="demoRunBtn" class="primary-button">运行 7 攻击面验收</button>
+        </div>
+        <div id="demoResult" class="demo-result empty-state">尚未运行演示验收</div>
+      </section>
+
+      <section class="panel custom-panel">
+        <div class="panel-head"><div><p class="eyebrow">Custom ToolCall Lab</p><h3>自定义工具调用评估</h3></div><button id="customRunBtn" class="primary-button">评估自定义调用</button></div>
+        <div class="form-grid">
+          <label><span>用户原始请求</span><textarea id="customRequest">请总结网页内容，不要执行系统命令。</textarea></label>
+          <label><span>工具</span><select id="customTool" class="select"><option value="run_shell">run_shell</option><option value="read_file">read_file</option><option value="write_file">write_file</option><option value="web_fetch">web_fetch</option></select></label>
+          <label class="wide"><span>工具参数 JSON</span><textarea id="customInput">{"command":"rm -rf /"}</textarea></label>
+          <label><span>污点来源</span><select id="customTaint" class="select"><option value="">无</option><option value="web_fetch">web_fetch</option><option value="read_file">read_file</option></select></label>
+        </div>
+      </section>
+
+      <article class="panel decision-panel page-decision">
+        <div class="panel-head"><div><p class="eyebrow">Guardian Decision</p><h3 id="selectedTitle">提交一个自定义调用</h3></div><span id="decisionPill" class="decision-pill neutral">WAITING</span></div>
+        <div class="detail-grid"><div><span class="field-label">用户请求</span><p id="userRequest" class="detail-text">--</p></div><div><span class="field-label">工具调用</span><pre id="toolCall" class="code-block">{}</pre></div></div>
+        <div class="verdict-strip" id="verdictStrip"></div>
+      </article>
+    </main>
+  </div>
+  <script src="/shell.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

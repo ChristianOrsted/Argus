@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>红队样本 · Argus Guardian</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="samples">
+  <div class="app-shell">
+    <aside class="sidebar"></aside>
+    <main class="workspace">
+      <section class="overview-grid">
+        <article class="panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">Red Team Corpus</p><h3>攻击面样本</h3></div>
+            <select id="categoryFilter" class="select"><option value="all">全部类别</option></select>
+          </div>
+          <div id="caseList" class="case-list"></div>
+        </article>
+        <article class="panel decision-panel">
+          <div class="panel-head"><div><p class="eyebrow">Guardian Decision</p><h3 id="selectedTitle">选择一个样本</h3></div><span id="decisionPill" class="decision-pill neutral">WAITING</span></div>
+          <div class="detail-grid"><div><span class="field-label">用户请求</span><p id="userRequest" class="detail-text">--</p></div><div><span class="field-label">工具调用</span><pre id="toolCall" class="code-block">{}</pre></div></div>
+          <div class="verdict-strip" id="verdictStrip"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+  <script src="/shell.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

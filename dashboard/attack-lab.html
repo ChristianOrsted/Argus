@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>攻击面实验台 · Argus Guardian</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="attack-lab">
+  <div class="app-shell">
+    <aside class="sidebar"></aside>
+    <main class="workspace">
+      <section class="surface-layout">
+        <article class="panel surface-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">Attack Surface Lab</p>
+              <h3>独立攻击面重跑</h3>
+            </div>
+            <span id="deepseekStatus" class="tag benign">DeepSeek: checking</span>
+          </div>
+          <div id="surfaceGrid" class="surface-grid"></div>
+        </article>
+
+        <article class="panel deepseek-panel">
+          <div class="panel-head">
+            <div>
+              <p class="eyebrow">DeepSeek Red Team</p>
+              <h3>在线生成攻击样本</h3>
+            </div>
+            <button id="deepseekRunBtn" class="primary-button">运行 DeepSeek 红队</button>
+          </div>
+          <div class="deepseek-controls">
+            <label>
+              <span>攻击面</span>
+              <select id="deepseekSurface" class="select"></select>
+            </label>
+            <label>
+              <span>攻击模式</span>
+              <select id="deepseekMode" class="select"></select>
+            </label>
+            <label>
+              <span>生成条数</span>
+              <input id="deepseekCount" class="text-input" type="number" min="1" max="8" value="3">
+            </label>
+            <label class="wide-control">
+              <span>DeepSeek API Key（可留空使用服务器环境变量）</span>
+              <input id="deepseekKey" class="text-input" type="password" autocomplete="off" placeholder="仅本次请求使用，不保存">
+            </label>
+            <label class="wide-control">
+              <span>红队提示词（可显式修改）</span>
+              <textarea id="deepseekPrompt" class="compact-textarea" placeholder="留空则使用该攻击面的默认红队提示词"></textarea>
+            </label>
+            <label class="toggle-row">
+              <input id="deepseekIntent" type="checkbox">
+              <span>同时启用 DeepSeek intent judge</span>
+            </label>
+          </div>
+          <div class="matrix-head">
+            <span>条目信息</span><span>总</span><span>1</span><span>2</span><span>3</span><span>4</span><span>操作</span>
+          </div>
+          <div id="batchMatrix" class="batch-matrix"></div>
+          <div class="generated-grid">
+            <div>
+              <span class="field-label">选中条目：攻击摘要（点击条目查看完整审计）</span>
+              <div id="deepseekOutput" class="structured-detail empty-state">尚未选择攻击条目</div>
+            </div>
+          </div>
+          <div id="batchDetailModal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+            <div class="modal-card">
+              <div class="modal-head">
+                <div><p class="eyebrow">DeepSeek Attack Detail</p><h3 id="modalTitle">攻击与审计详情</h3></div>
+                <button id="modalCloseBtn" class="ghost-button">关闭</button>
+              </div>
+              <div id="modalStatusRow" class="modal-status-row"></div>
+              <div id="modalChain" class="chain-view"></div>
+              <div class="modal-grid">
+                <div><span class="field-label">攻击点</span><div id="modalAttackDetail" class="structured-detail"></div></div>
+                <div><span class="field-label">审计阻断结果</span><div id="modalGuardianDetail" class="structured-detail"></div></div>
+              </div>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <article class="panel decision-panel page-decision">
+        <div class="panel-head"><div><p class="eyebrow">Guardian Decision</p><h3 id="selectedTitle">选择一个攻击面</h3></div><span id="decisionPill" class="decision-pill neutral">WAITING</span></div>
+        <div class="detail-grid"><div><span class="field-label">用户请求</span><p id="userRequest" class="detail-text">运行攻击面重跑或红队生成后显示</p></div><div><span class="field-label">工具调用</span><pre id="toolCall" class="code-block">{}</pre></div></div>
+        <div class="verdict-strip" id="verdictStrip"></div>
+      </article>
+    </main>
+  </div>
+  <script src="/shell.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

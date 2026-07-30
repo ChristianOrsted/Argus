@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>审计流 · Argus Guardian</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-page="audit">
+  <div class="app-shell">
+    <aside class="sidebar"></aside>
+    <main class="workspace">
+      <section class="panel audit-panel">
+        <div class="panel-head">
+          <div><p class="eyebrow">Audit Stream</p><h3>交互审计记录</h3><small id="historySummary" class="scope-note">历史记录加载中</small></div>
+          <button id="clearAuditBtn" class="ghost-button">清空历史</button>
+        </div>
+        <div id="auditLog" class="audit-log"></div>
+      </section>
+    </main>
+  </div>
+  <script src="/shell.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

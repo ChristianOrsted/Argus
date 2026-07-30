@@ -96,6 +96,19 @@ def test_static_path_resolution_blocks_traversal():
     assert resolve_static_path("/../README.md") is None
 
 
+def test_static_path_resolution_serves_each_dashboard_page():
+    for path in (
+        "/",
+        "/attack-lab.html",
+        "/samples.html",
+        "/defense.html",
+        "/rules.html",
+        "/evaluation.html",
+        "/audit.html",
+    ):
+        assert resolve_static_path(path) is not None
+
+
 def test_attack_surface_lab_contains_required_surfaces():
     ids = {surface.id for surface in ATTACK_SURFACES}
     assert {

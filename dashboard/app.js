@@ -16,7 +16,21 @@ const state = {
   busy: false,
 };
 
-const el = (id) => document.getElementById(id);
+// 每个导航项现在是独立页面。页面只保留自身需要的组件，因此这里为不存在的
+// 组件提供一个空实现，让共享的数据加载与操作逻辑可以安全复用。
+const missingElement = new Proxy({
+  addEventListener: () => {},
+  querySelectorAll: () => [],
+}, {
+  get(target, property) {
+    return property in target ? target[property] : "";
+  },
+  set() {
+    return true;
+  },
+});
+
+const el = (id) => document.getElementById(id) || missingElement;
 
 // 四层 Guardian 的展示顺序，对应页面矩阵中的 1 / 2 / 3 / 4。
 const LAYER_ORDER = ["policy", "taint", "intent", "anomaly"];
